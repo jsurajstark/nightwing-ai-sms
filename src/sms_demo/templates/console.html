@@ -1,0 +1,111 @@
+{% extends "base.html" %}
+{% block title %}Console · Nightwing SMS Demo{% endblock %}
+{% set refresh_secs = 2 if has_processing else 30 %}
+{% block head %}
+  <meta http-equiv="refresh" content="{{ refresh_secs }}" />
+  <style>
+    @keyframes demo-progress-slide {
+      0% { transform: translateX(-100%); }
+      100% { transform: translateX(350%); }
+    }
+    .demo-progress-bar {
+      width: 35%;
+      animation: demo-progress-slide 1.1s ease-in-out infinite;
+    }
+  </style>
+{% endblock %}
+{% block content %}
+  <header class="mb-6 flex flex-wrap items-center justify-between gap-4 border-b border-slate-800 pb-4">
+    <div>
+      <h1 class="text-2xl font-semibold tracking-tight">SMS intake console</h1>
+      <p class="text-sm text-slate-400">Simulated intake + optional Twilio inbound ({{ "on" if twilio_enabled else "off" }}).</p>
+    </div>
+    <div class="flex flex-wrap items-center gap-3">
+      <div
+        id="refresh-timer"
+        class="rounded-md border border-slate-700 bg-slate-900/80 px-3 py-2 text-center min-w-[5.5rem]"
+        data-refresh-seconds="{{ refresh_secs }}"
+        title="Page reloads automatically to show new intakes"
+      >
+        <p class="text-[10px] uppercase tracking-wide text-slate-500">Page refresh</p>
+        <p class="text-lg font-semibold tabular-nums text-sky-300">
+          <span id="refresh-countdown">{{ refresh_secs }}</span><span class="text-sm text-slate-400">s</span>
+        </p>
+      </div>
+      <form method="post" action="/demo/reset" onsubmit="return confirm('Clear all demo rows?');">
+        <button type="submit" class="rounded-md bg-rose-600 px-3 py-2 text-sm font-medium text-white hover:bg-rose-500">Reset</button>
+      </form>
+    </div>
+  </header>
+
+  {% if has_processing %}
+    <p class="mb-4 rounded-md border border-sky-800 bg-sky-950/40 px-3 py-2 text-sm text-sky-200">
+      Extraction in progress — page reloads every <strong>2s</strong> (countdown in header) until complete.
+    </p>
+  {% endif %}
+
+  {% if hint %}
+    <p class="mb-4 rounded-md border border-amber-800 bg-amber-950/50 px-3 py-2 text-sm text-amber-200">{{ hint }}</p>
+  {% endif %}
+
+  <section class="mb-8 rounded-lg border border-slate-800 bg-slate-900/50 p-4">
+    <form id="simulate-form" method="post" action="/demo/simulate" class="space-y-3">
+      <label class="block text-sm font-medium text-slate-300">Message body</label>
+      <textarea name="sms_body" rows="5" class="w-full rounded-md border border-slate-700 bg-slate-950 px-3 py-2 text-sm text-slate-100 focus:border-sky-500 focus:outline-none focus:ring-1 focus:ring-sky-500" placeholder="Paste SMS in any language…">{{ prefill }}</textarea>
+      <div id="submit-progress" class="hidden space-y-2">
+        <p class="text-sm text-sky-300">Submitting — page will refresh when intake is queued…</p>
+        <div class="h-2 w-full overflow-hidden rounded-full bg-slate-800">
+          <div class="demo-progress-bar h-full rounded-full bg-sky-500"></div>
+        </div>
+      </div>
+      <div class="flex flex-wrap gap-2">
+        <button id="submit-btn" type="submit" class="rounded-md bg-sky-600 px-4 py-2 text-sm font-medium text-white hover:bg-sky-500 disabled:cursor-not-allowed disabled:opacity-60">Submit</button>
+        <a href="/demo/console?sample=clean" class="rounded-md border border-slate-600 px-3 py-2 text-sm text-slate-200 hover:bg-slate-800">Try clean</a>
+        <a href="/demo/console?sample=messy" class="rounded-md border border-slate-600 px-3 py-2 text-sm text-slate-200 hover:bg-slate-800">Try messy</a>
+        <a href="/demo/console?sample=ambiguous" class="rounded-md border border-slate-600 px-3 py-2 text-sm text-slate-200 hover:bg-slate-800">Try ambiguous</a>
+        <a href="/demo/console?sample=spanish" class="rounded-md border border-slate-600 px-3 py-2 text-sm text-slate-200 hover:bg-slate-800">Try Spanish</a>
+        <a href="/demo/console?sample=international" class="rounded-md border border-slate-600 px-3 py-2 text-sm text-slate-200 hover:bg-slate-800">Try intl (+91)</a>
+      </div>
+    </form>
+  </section>
+
+  <section class="space-y-4">
+    <h2 class="text-lg font-medium text-slate-200">Recent intakes</h2>
+    {% if not intakes %}
+      <p class="text-sm text-slate-500">No rows yet. Submit a message above.</p>
+    {% else %}
+      {% for intake in intakes %}
+        {% include "_intake_row.html" %}
+      {% endfor %}
+    {% endif %}
+  </section>
+
+  <script>
+    (function () {
+      var timer = document.getElementById("refresh-timer");
+      var countdownEl = document.getElementById("refresh-countdown");
+      if (timer && countdownEl) {
+        var total = parseInt(timer.getAttribute("data-refresh-seconds") || "30", 10);
+        var left = total;
+        setInterval(function () {
+          left -= 1;
+          if (left <= 0) {
+            left = total;
+          }
+          countdownEl.textContent = String(left);
+        }, 1000);
+      }
+
+      var form = document.getElementById("simulate-form");
+      if (!form) return;
+      form.addEventListener("submit", function () {
+        var body = form.querySelector('textarea[name="sms_body"]');
+        if (body && !body.value.trim()) return;
+        var bar = document.getElementById("submit-progress");
+        var btn = document.getElementById("submit-btn");
+        if (bar) bar.classList.remove("hidden");
+        if (btn) btn.disabled = true;
+      });
+    })();
+  </script>
+{% endblock %}
