@@ -51,8 +51,6 @@ async def twilio_sms(
         request_path_with_query=path_q,
         post_params=post_params,
         twilio_signature=sig,
-        forwarded_proto=request.headers.get("X-Forwarded-Proto"),
-        forwarded_host=request.headers.get("X-Forwarded-Host"),
     ):
         # Do not call LLM on bad signature
         raise HTTPException(status_code=403, detail="Invalid Twilio signature")
