@@ -12,7 +12,8 @@ This document is the **scope contract** between engineering and stakeholders. An
 ## Platform and data
 
 - SQLite only; no Alembic migrations; no MySQL compatibility guarantees.
-- No Redis, no distributed locks, no idempotency keys for duplicate SMS.
+- Demo queue is **Celery + Redis** (single-worker LLM serialization); production **SQS** backend is wired but not deployed here.
+- No idempotency keys for duplicate Twilio `MessageSid` retries.
 - Logs and DB may retain **real phone numbers** if you test with Twilio—use synthetic content and controlled numbers.
 
 ## Core and integrations

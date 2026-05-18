@@ -8,7 +8,11 @@ from sms_demo.llm.ollama_provider import OllamaProvider
 def get_provider(settings: Settings) -> LLMProvider:
     p = (settings.llm_provider or "ollama").lower().strip()
     if p == "ollama":
-        return OllamaProvider(settings.ollama_host, settings.ollama_model)
+        return OllamaProvider(
+            settings.ollama_host,
+            settings.ollama_model,
+            timeout_s=settings.llm_timeout_s,
+        )
     if p == "anthropic":
         return AnthropicProvider()
     if p == "bedrock":
