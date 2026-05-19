@@ -5,7 +5,7 @@
     },
     "variable": [
       { "key": "base_url", "value": "https://api-dev.mynightwing.com" },
-      { "key": "access_token", "value": "PASTE_YOUR_JWT_HERE" }
+      { "key": "access_token", "value": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJvYmoiOiJleUpoYkdjaU9pSklVekkxTmlJc0luUjVjQ0k2SWtwWFZDSjkuZXlKdlltb2lPbnNpYVdRaU9qSXNJbVZ0WVdsc0lqb2liR0YxY21GQVpuSnZiblJzYVc1bGJXVmtMbTVsZENJc0luVnpaWEp1WVcxbElqb2liR0YxY21Fd01ETWlMQ0p5YjJ4bFNXUWlPakVzSW1acGNtVmlZWE5sWDNSdmEyVnVJam9pSWl3aWMzUmhabVpmY205c1pVbGtJam9pSWl3aWFYTlRhWFJsVDNkdVpYSWlPaUl4SW4wc0ltbGhkQ0k2TVRjM09URTVOREF5T0N3aVpYaHdJam94TnpjNU1qRTFOakk0ZlEuZy0xblZsMTRBdS04ZkVmS0ZwTHRnQ28zUU9Hc3Z3dW4xcXNaMlJmY2pncyIsImlhdCI6MTc3OTE5NDAyOCwiZXhwIjoxNzc5MjE1NjI4fQ.Cly7AGvPartOB5U71Ul4hK6M9QosIKBJlAtjL4d00B0" }
     ],
     "item": [
       {
@@ -18,7 +18,7 @@
           ],
           "body": {
             "mode": "raw",
-            "raw": "{\n  \"first_name\": \"jace\",\n  \"last_name\": \"Garcia\",\n  \"mobile\": \"15551234567\",\n  \"synopsis\": \"Needs ortho\",\n  \"referral_source\": \"sms\"\n}"
+            "raw": "{\n  \"first_name\": \"jace\",\n  \"last_name\": \"Garcia\",\n  \"mobile\": \"15551234567\",\n  \"synopsis\": \"Needs ortho\",\n  \"referral_source\": \"sms\",\n  \"sms_text\": \"Referral for Jace Garcia, phone 555-123-4567, needs ortho consult\"\n}"
           },
           "url": "{{base_url}}/api/v1/partial-referral"
         }

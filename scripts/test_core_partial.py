@@ -32,7 +32,11 @@ def main() -> int:
             "confidence": 0.9,
         }
     )
-    body = to_partial_referral_request(parsed, client_id=client_id)
+    body = to_partial_referral_request(
+        parsed,
+        client_id=client_id,
+        sms_text="Referral for Ana Garcia, phone +15554443567, needs ortho.",
+    )
     print("Request body:", body)
 
     try:

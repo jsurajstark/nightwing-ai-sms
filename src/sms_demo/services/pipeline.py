@@ -36,12 +36,15 @@ def _persist_partial_referral(
     settings: Settings,
     intake_id: int,
     parsed: dict,
+    *,
+    sms_text: str,
 ) -> None:
     """Create partial referral on Core (or local stub when Core is disabled)."""
     body = to_partial_referral_request(
         parsed,
         referral_source="sms",
         client_id=settings.core_default_client_id,
+        sms_text=sms_text,
     )
     core_row: dict
     status = "created"
@@ -279,7 +282,7 @@ def _run_llm_phase(db: Session, settings: Settings, intake: Intake, raw: str) ->
     )
 
     if route.decision == "auto" and parsed is not None:
-        _persist_partial_referral(db, settings, intake.id, parsed)
+        _persist_partial_referral(db, settings, intake.id, parsed, sms_text=raw)
 
     _mark_intake_complete(intake, llm_duration_ms=llm_duration_ms)
 

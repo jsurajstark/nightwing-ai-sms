@@ -65,6 +65,7 @@ _CORE_PARTIAL_KEYS = frozenset(
         "referral_source",
         "mobile",
         "language",
+        "sms_text",
     }
 )
 
@@ -93,6 +94,7 @@ def to_partial_referral_request(
     *,
     referral_source: str = "sms",
     client_id: int | None = None,
+    sms_text: str | None = None,
 ) -> dict[str, Any]:
     """Map extraction → Core partial-referral JSON (non-null fields only; clientId optional)."""
     raw = extraction_to_core_payload(parsed, source=referral_source)
@@ -112,4 +114,6 @@ def to_partial_referral_request(
             body["mobile"] = normalized
         else:
             del body["mobile"]
+    if _present(sms_text):
+        body["sms_text"] = str(sms_text).strip()
     return body
