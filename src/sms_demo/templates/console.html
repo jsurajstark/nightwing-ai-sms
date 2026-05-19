@@ -39,7 +39,7 @@
 
   {% if has_processing or has_queued %}
     <p class="mb-4 rounded-md border border-sky-800 bg-sky-950/40 px-3 py-2 text-sm text-sky-200">
-      {% if has_processing %}Extraction in progress{% else %}Waiting in Celery queue{% endif %} — page reloads every <strong>2s</strong> until complete. Ensure <code class="text-xs">make worker</code> is running.
+      {% if has_processing %}Extraction in progress{% else %}Waiting in Celery queue{% endif %} — page reloads every <strong>{{ refresh_secs }}s</strong> until complete. Ensure <code class="text-xs">make worker</code> is running.
     </p>
   {% endif %}
 

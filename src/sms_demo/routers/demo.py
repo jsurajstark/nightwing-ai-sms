@@ -54,7 +54,7 @@ def console(
     has_processing = any(intake_is_processing(i) for i in intakes)
     has_queued = any(intake_is_queued(i) for i in intakes)
     active_intake_id = next((i.id for i in intakes if intake_is_processing(i)), None)
-    refresh_secs = 2 if (has_processing or has_queued) else 30
+    refresh_secs = 10 if (has_processing or has_queued) else 30
     return templates.TemplateResponse(
         request,
         "console.html",
