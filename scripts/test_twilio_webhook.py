@@ -16,7 +16,7 @@ from sms_demo.config import get_settings
 from sms_demo.services.twilio_signature import compute_signature
 
 WEBHOOK_PATH = "/webhooks/twilio/sms"
-DEFAULT_BODY = "yashraj patel needs medical examination this week"
+DEFAULT_BODY = "Sarah Williams requires blood work and diabetes screening tomorrow morning."
 LOCAL_PORT = 8000
 
 

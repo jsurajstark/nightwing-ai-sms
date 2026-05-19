@@ -1,6 +1,6 @@
 # Nightwing AI SMS demo
 
-**FastAPI** demo: console or Twilio inbound SMS (any language) → **Celery + Redis** extraction queue → **LLM JSON extraction** (local **Ollama** or **Google Gemini**) → routing (auto / review / spam) → stub Core partial referral → **SQLite** + Jinja2 console.
+**FastAPI** demo: console or Twilio inbound SMS (any language) → **Celery + Redis** extraction queue → **LLM JSON extraction** (local **Ollama** or **Google Gemini**) → routing (auto / review / spam) → **Nightwing Core** `POST /api/v1/partial-referral` (or local stub when disabled) → **SQLite** + Jinja2 console.
 
 Production path: swap `QUEUE_BACKEND=sqs` and run workers on **AWS SQS** (Lambda/ECS) — same `complete_intake` entrypoint.
 
@@ -87,6 +87,36 @@ SMS body may be in **any language** (or mixed). The model is instructed to parse
 
 There is **no outbound SMS** in this demo.
 
+## Nightwing Core partial referral
+
+When routing is **auto**, the worker maps extraction → `POST {CORE_API_BASE_URL}/api/v1/partial-referral` with header `x-access-token`.
+
+In `.env`:
+
+```env
+CORE_API_BASE_URL=http://localhost:8080
+CORE_API_ACCESS_TOKEN=<JWT from Core login>
+# CORE_DEFAULT_CLIENT_ID=   # optional; leave unset for null clientId
+CORE_PARTIAL_REFERRAL_ENABLED=true
+```
+
+Smoke-test without SMS:
+
+```bash
+python scripts/test_core_partial.py
+```
+
+End-to-end (SMS → LLM → Core partial-referral):
+
+```bash
+python scripts/test_e2e_sms.py
+python scripts/test_e2e_sms.py "Referral for Jane Doe, phone +15551234567, needs MRI."
+python scripts/test_e2e_sms.py --file samples/clean.txt
+make test-e2e-sms
+```
+
+Set `CORE_PARTIAL_REFERRAL_ENABLED=false` (or leave token empty) to use the in-process stub instead.
+
 ## Makefile
 
 - `make demo` — API server (uses `LLM_PROVIDER` from `.env`)
@@ -96,6 +126,7 @@ There is **no outbound SMS** in this demo.
 - `make seed` — samples using `.env` provider; `make seed-ollama` / `make seed-gemini` to force
 - `make reset` — truncate demo tables
 - `make test-twilio-webhook` — signed POST to `/webhooks/twilio/sms` (local + `PUBLIC_BASE_URL`; needs `make demo` running)
+- `make test-e2e-sms` — full pipeline SMS → LLM → Core partial-referral (no server required)
 
 ## Talk track
 

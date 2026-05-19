@@ -1,4 +1,4 @@
-.PHONY: demo demo-ollama demo-gemini worker ollama-pull seed seed-ollama seed-gemini reset test-twilio-webhook
+.PHONY: demo demo-ollama demo-gemini worker ollama-pull seed seed-ollama seed-gemini reset test-twilio-webhook test-e2e-sms
 
 # Use an activated Python 3.12+ venv (e.g. source .../fastapi_ai_venv_3.12/bin/activate)
 # so `python` resolves to the env that has dependencies installed (`pip install -e .`).
@@ -40,6 +40,10 @@ reset:
 # Signed POST to /webhooks/twilio/sms (local + PUBLIC_BASE_URL). Requires `make demo` running.
 test-twilio-webhook:
 	python scripts/test_twilio_webhook.py
+
+# Full pipeline: SMS → LLM → Core partial-referral (uses .env; default sample: samples/clean.txt)
+test-e2e-sms:
+	python scripts/test_e2e_sms.py
 
 test-twilio-webhook-all:
 	python scripts/test_twilio_webhook.py --all --local-only

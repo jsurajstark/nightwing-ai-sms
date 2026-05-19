@@ -1,0 +1,57 @@
+{
+    "info": {
+      "name": "Nightwing Dev - Partial Referral",
+      "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+    },
+    "variable": [
+      { "key": "base_url", "value": "https://api-dev.mynightwing.com" },
+      { "key": "access_token", "value": "PASTE_YOUR_JWT_HERE" }
+    ],
+    "item": [
+      {
+        "name": "1. POST - Create partial referral",
+        "request": {
+          "method": "POST",
+          "header": [
+            { "key": "Content-Type", "value": "application/json" },
+            { "key": "x-access-token", "value": "{{access_token}}" }
+          ],
+          "body": {
+            "mode": "raw",
+            "raw": "{\n  \"first_name\": \"jace\",\n  \"last_name\": \"Garcia\",\n  \"mobile\": \"15551234567\",\n  \"synopsis\": \"Needs ortho\",\n  \"referral_source\": \"sms\"\n}"
+          },
+          "url": "{{base_url}}/api/v1/partial-referral"
+        }
+      },
+      {
+        "name": "2. GET - List all partial referrals",
+        "request": {
+          "method": "GET",
+          "header": [
+            { "key": "Content-Type", "value": "application/json" },
+            { "key": "x-access-token", "value": "{{access_token}}" }
+          ],
+          "url": "{{base_url}}/api/v1/partial-referral"
+        }
+      },
+      {
+        "name": "3. GET - List (paginated)",
+        "request": {
+          "method": "GET",
+          "header": [
+            { "key": "Content-Type", "value": "application/json" },
+            { "key": "x-access-token", "value": "{{access_token}}" }
+          ],
+          "url": {
+            "raw": "{{base_url}}/api/v1/partial-referral?page=1&limit=50",
+            "host": ["{{base_url}}"],
+            "path": ["api", "v1", "partial-referral"],
+            "query": [
+              { "key": "page", "value": "1" },
+              { "key": "limit", "value": "50" }
+            ]
+          }
+        }
+      }
+    ]
+  }

@@ -19,7 +19,8 @@ from sms_demo.services.phone_extract import reconcile_extraction_phones
 from sms_demo.services.llm_queue import llm_extraction_lock
 from sms_demo.services.routing import RoutingOutcome, decide
 from sms_demo.services.timing import format_duration_ms, utc_now, wall_duration_ms
-from sms_demo.utility.mapper import extraction_to_core_payload
+from sms_demo.utility.core_client import CorePartialReferralError, create_partial_referral
+from sms_demo.utility.core_partial import to_partial_referral_request
 from sms_demo.utility.stub_core import apply_partial_referral
 
 logger = logging.getLogger(__name__)
@@ -28,6 +29,70 @@ logger = logging.getLogger(__name__)
 def _load_extraction_prompt() -> str:
     path = Path(__file__).resolve().parent.parent / "prompts" / "extraction.txt"
     return path.read_text(encoding="utf-8")
+
+
+def _persist_partial_referral(
+    db: Session,
+    settings: Settings,
+    intake_id: int,
+    parsed: dict,
+) -> None:
+    """Create partial referral on Core (or local stub when Core is disabled)."""
+    body = to_partial_referral_request(
+        parsed,
+        referral_source="sms",
+        client_id=settings.core_default_client_id,
+    )
+    core_row: dict
+    status = "created"
+
+    use_core = (
+        settings.core_partial_referral_enabled
+        and settings.core_api_access_token
+        and settings.core_api_base_url
+    )
+    if use_core:
+        try:
+            core_row = create_partial_referral(
+                settings.core_api_base_url,
+                settings.core_api_access_token,
+                body,
+                timeout=settings.core_api_timeout_s,
+            )
+            logger.info(
+                "Core partial-referral created intake_id=%s core_id=%s",
+                intake_id,
+                core_row.get("id"),
+            )
+        except CorePartialReferralError as e:
+            logger.exception(
+                "Core partial-referral failed intake_id=%s: %s",
+                intake_id,
+                e,
+            )
+            status = "error"
+            core_row = {
+                "error": str(e),
+                "status_code": e.status_code,
+                "request": body,
+                "body": e.body,
+            }
+    else:
+        logger.info(
+            "Core partial-referral skipped (disabled or no token); using stub intake_id=%s",
+            intake_id,
+        )
+        core_row = apply_partial_referral(body)
+
+    ref_id = core_row.get("id") or core_row.get("referral_id")
+    db.add(
+        PartialReferral(
+            intake_id=intake_id,
+            referral_id=str(ref_id) if ref_id is not None else None,
+            status=status,
+            stub_response_json=json.dumps(core_row, default=str),
+        )
+    )
 
 
 def _model_name(settings: Settings) -> str:
@@ -214,17 +279,7 @@ def _run_llm_phase(db: Session, settings: Settings, intake: Intake, raw: str) ->
     )
 
     if route.decision == "auto" and parsed is not None:
-        payload = extraction_to_core_payload(parsed, source="sms")
-        stub_out = apply_partial_referral(payload)
-        ref_id = stub_out.get("referral_id")
-        db.add(
-            PartialReferral(
-                intake_id=intake.id,
-                referral_id=str(ref_id) if ref_id is not None else None,
-                status=str(stub_out["status"]),
-                stub_response_json=json.dumps(stub_out, default=str),
-            )
-        )
+        _persist_partial_referral(db, settings, intake.id, parsed)
 
     _mark_intake_complete(intake, llm_duration_ms=llm_duration_ms)
 
