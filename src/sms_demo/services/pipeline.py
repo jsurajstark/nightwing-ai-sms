@@ -15,6 +15,7 @@ from sms_demo.llm.retry import extract_with_retries
 from sms_demo.models import Extraction, Intake, PartialReferral, RoutingDecision
 from sms_demo.services.extraction_normalize import normalize_extraction
 from sms_demo.services.name_extract import reconcile_extraction_names
+from sms_demo.services.email_extract import reconcile_extraction_emails
 from sms_demo.services.phone_extract import reconcile_extraction_phones
 from sms_demo.services.llm_queue import llm_extraction_lock
 from sms_demo.services.routing import RoutingOutcome, decide
@@ -255,13 +256,15 @@ def _run_llm_phase(db: Session, settings: Settings, intake: Intake, raw: str) ->
         parsed = normalize_extraction(parsed)
         parsed = reconcile_extraction_names(raw, parsed)
         parsed = reconcile_extraction_phones(raw, parsed)
+        parsed = reconcile_extraction_emails(raw, parsed)
         raw_model_json = json.dumps(parsed, default=str)
         logger.info(
-            "Extraction done intake_id=%s first=%r last=%r mobile=%r",
+            "Extraction done intake_id=%s first=%r last=%r mobile=%r email=%r",
             intake.id,
             parsed.get("first_name") if isinstance(parsed, dict) else None,
             parsed.get("last_name") if isinstance(parsed, dict) else None,
             parsed.get("mobile") if isinstance(parsed, dict) else None,
+            parsed.get("email") if isinstance(parsed, dict) else None,
         )
     except LLMError as e:
         extraction_error = str(e)

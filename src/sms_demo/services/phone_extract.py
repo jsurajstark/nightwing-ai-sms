@@ -80,10 +80,19 @@ def reconcile_patient_phone(raw: str, llm_phone: str | None) -> str | None:
 def reconcile_extraction_phones(raw: str, parsed: dict) -> dict:
     if not isinstance(parsed, dict):
         return parsed
-    llm_phone = parsed.get("patient_phone")
+    llm_phone = parsed.get("mobile")
+    if llm_phone is None:
+        llm_phone = parsed.get("patient_phone")
     if llm_phone is not None and not isinstance(llm_phone, str):
         return parsed
     fixed = reconcile_patient_phone(raw, llm_phone)
     if fixed == llm_phone:
         return parsed
-    return {**parsed, "patient_phone": fixed}
+    out = dict(parsed)
+    if fixed is None:
+        out.pop("mobile", None)
+        out.pop("patient_phone", None)
+        return out
+    out["mobile"] = fixed
+    out.pop("patient_phone", None)
+    return out

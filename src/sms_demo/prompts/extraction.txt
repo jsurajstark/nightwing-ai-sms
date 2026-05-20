@@ -14,6 +14,10 @@ Phone rules (any country — do NOT assume United States):
 - Do NOT convert local numbers to E.164 unless the full international form is already in the message.
 - Do NOT invent or substitute example numbers. If the message has no phone number, patient_phone MUST be null (never guess).
 
+Email rules:
+- patient_email: copy EXACTLY from the message when an email address appears (e.g. user@domain.com).
+- Do NOT invent or substitute example emails. If the message has no email, patient_email MUST be null (never guess).
+
 - service_requested: short clinical need in English when you can infer it; if unclear, use a brief phrase in the message's language.
 - notes: optional context in English or the source language.
 
@@ -21,6 +25,7 @@ Required keys (use null for unknown string fields, never omit keys):
 - patient_first_name: string or null — required for auto-routing when present in message
 - patient_last_name: string or null — required for auto-routing when present in message
 - patient_phone: string or null — optional; extract if present in the message
+- patient_email: string or null — optional; extract if present in the message
 - service_requested: string or null — optional; extract if present in the message
 - confidence: number between 0 and 1 (your estimate of extraction quality)
 
