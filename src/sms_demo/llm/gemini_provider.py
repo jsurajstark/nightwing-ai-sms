@@ -6,6 +6,7 @@ from google import genai
 from google.genai import types
 
 from sms_demo.llm.base import LLMError, LLMProvider
+from sms_demo.llm.error_format import llm_error_from_exception, log_llm_api_failure
 
 logger = logging.getLogger(__name__)
 
@@ -56,8 +57,14 @@ class GeminiProvider(LLMProvider):
             )
         except Exception as e:
             elapsed_ms = (time.perf_counter() - started) * 1000
-            logger.error("Gemini request failed after %.0fms: %s", elapsed_ms, e)
-            raise LLMError(str(e)) from e
+            log_llm_api_failure(
+                logger,
+                provider="Gemini",
+                model=self._model,
+                elapsed_ms=elapsed_ms,
+                exc=e,
+            )
+            raise llm_error_from_exception(e) from e
 
         elapsed_ms = (time.perf_counter() - started) * 1000
         usage = getattr(response, "usage_metadata", None)

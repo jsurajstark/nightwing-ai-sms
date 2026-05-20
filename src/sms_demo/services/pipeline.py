@@ -223,6 +223,7 @@ def _run_llm_phase(db: Session, settings: Settings, intake: Intake, raw: str) ->
     system_prompt = _load_extraction_prompt()
     parsed: dict | None = None
     extraction_error: str | None = None
+    llm_routing_reason: str | None = None
     raw_model_json: str | None = None
     llm_duration_ms: float | None = None
 
@@ -242,7 +243,12 @@ def _run_llm_phase(db: Session, settings: Settings, intake: Intake, raw: str) ->
         )
     except LLMError as e:
         extraction_error = str(e)
-        logger.error("Extraction failed intake_id=%s: %s", intake.id, e)
+        llm_routing_reason = e.routing_reason
+        logger.error(
+            "Extraction failed intake_id=%s | reason=%s",
+            intake.id,
+            llm_routing_reason,
+        )
     finally:
         llm_duration_ms = (time.perf_counter() - llm_started) * 1000.0
 
@@ -260,7 +266,11 @@ def _run_llm_phase(db: Session, settings: Settings, intake: Intake, raw: str) ->
     db.flush()
 
     if extraction_error:
-        route = RoutingOutcome("review", f"llm_error:{extraction_error[:200]}", None)
+        route = RoutingOutcome(
+            "review",
+            llm_routing_reason or f"llm_error:{extraction_error[:200]}",
+            None,
+        )
     else:
         assert parsed is not None
         route = decide(parsed, raw_body=raw)
