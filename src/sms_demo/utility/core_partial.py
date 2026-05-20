@@ -2,9 +2,9 @@
 
 from __future__ import annotations
 
-import re
 from typing import Any
 
+from sms_demo.services.phone_normalize import normalize_mobile_for_core
 from sms_demo.utility.mapper import extraction_to_core_payload
 
 # Columns on partial_referrals (writable via API; excludes id/timestamps/server-set FKs).
@@ -82,11 +82,8 @@ def _present(val: object) -> bool:
 
 
 def _normalize_mobile_for_core(value: object) -> str | None:
-    """Core isNumeric validation accepts digits only (+15551234567 → 15551234567)."""
-    if value is None:
-        return None
-    digits = re.sub(r"\D", "", str(value))
-    return digits or None
+    """Core mobile: subscriber digits only (+15551234567 → 5551234567)."""
+    return normalize_mobile_for_core(value)
 
 
 def to_partial_referral_request(

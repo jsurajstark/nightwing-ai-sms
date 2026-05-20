@@ -16,7 +16,7 @@ class ToPartialReferralRequestTest(unittest.TestCase):
                 "mobile": "+15551234567",
             }
         )
-        self.assertEqual(body["mobile"], "15551234567")
+        self.assertEqual(body["mobile"], "5551234567")
 
     def test_mobile_strips_formatting(self) -> None:
         body = to_partial_referral_request(
@@ -37,6 +37,16 @@ class ToPartialReferralRequestTest(unittest.TestCase):
             }
         )
         self.assertNotIn("mobile", body)
+
+    def test_mobile_strips_india_country_code(self) -> None:
+        body = to_partial_referral_request(
+            {
+                "first_name": "Raj",
+                "last_name": "Patel",
+                "mobile": "+919876543210",
+            }
+        )
+        self.assertEqual(body["mobile"], "9876543210")
 
     def test_sms_text_included_when_provided(self) -> None:
         body = to_partial_referral_request(

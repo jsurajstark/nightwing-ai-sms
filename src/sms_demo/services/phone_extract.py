@@ -1,8 +1,10 @@
-"""Prefer phone numbers copied from the raw SMS over LLM substitutions (any country)."""
+"""Prefer phone numbers from the raw SMS; normalize to +1 for extraction storage."""
 
 from __future__ import annotations
 
 import re
+
+from sms_demo.services.phone_normalize import format_mobile_us_display, subscriber_digits
 
 # International-first patterns; avoid assuming US 3-3-4 only.
 _PHONE_PATTERNS = (
@@ -45,36 +47,31 @@ def phones_in_text(text: str) -> list[str]:
 
 
 def _phones_match(left: str, right: str) -> bool:
-    """Match without treating every number as US +1."""
-    a, b = _digits(left), _digits(right)
-    if not a or not b:
-        return False
-    if a == b:
-        return True
-
-    # Local vs +country: only if the longer form has '+' in the original text (real country code).
-    if len(a) > len(b) and a.endswith(b) and left.strip().startswith("+"):
-        return True
-    if len(b) > len(a) and b.endswith(a) and right.strip().startswith("+"):
-        return True
-    return False
+    """Match on subscriber digits after stripping country codes."""
+    a = subscriber_digits(left)
+    b = subscriber_digits(right)
+    return bool(a and b and a == b)
 
 
 def reconcile_patient_phone(raw: str, llm_phone: str | None) -> str | None:
     """
     Use only phones that appear in ``raw``. If the SMS has no phone, return null
-    (do not keep a model-invented number).
+    (do not keep a model-invented number). Returns +1<subscriber> display form.
     """
     in_message = phones_in_text(raw)
     if not in_message:
         return None
 
+    candidate: str | None = None
     if llm_phone:
-        for candidate in in_message:
-            if _phones_match(llm_phone, candidate):
-                return candidate
+        for item in in_message:
+            if _phones_match(llm_phone, item):
+                candidate = item
+                break
+    if candidate is None:
+        candidate = in_message[0]
 
-    return in_message[0]
+    return format_mobile_us_display(candidate)
 
 
 def reconcile_extraction_phones(raw: str, parsed: dict) -> dict:
@@ -86,13 +83,16 @@ def reconcile_extraction_phones(raw: str, parsed: dict) -> dict:
     if llm_phone is not None and not isinstance(llm_phone, str):
         return parsed
     fixed = reconcile_patient_phone(raw, llm_phone)
-    if fixed == llm_phone:
-        return parsed
-    out = dict(parsed)
     if fixed is None:
+        if parsed.get("mobile") is None and parsed.get("patient_phone") is None:
+            return parsed
+        out = dict(parsed)
         out.pop("mobile", None)
         out.pop("patient_phone", None)
         return out
+    if parsed.get("mobile") == fixed and parsed.get("patient_phone") is None:
+        return parsed
+    out = dict(parsed)
     out["mobile"] = fixed
     out.pop("patient_phone", None)
     return out

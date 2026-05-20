@@ -18,7 +18,7 @@
           ],
           "body": {
             "mode": "raw",
-            "raw": "{\n  \"first_name\": \"jace\",\n  \"last_name\": \"Garcia\",\n  \"mobile\": \"15551234567\",\n  \"synopsis\": \"Needs ortho\",\n  \"referral_source\": \"sms\",\n  \"sms_text\": \"Referral for Jace Garcia, phone 555-123-4567, needs ortho consult\"\n}"
+            "raw": "{\n  \"first_name\": \"jace\",\n  \"last_name\": \"Garcia\",\n  \"mobile\": \"5551234567\",\n  \"synopsis\": \"Needs ortho\",\n  \"referral_source\": \"sms\",\n  \"sms_text\": \"Referral for Jace Garcia, phone 555-123-4567, needs ortho consult\"\n}"
           },
           "url": "{{base_url}}/api/v1/partial-referral"
         }

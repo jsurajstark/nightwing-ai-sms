@@ -6,6 +6,7 @@ __pycache__/
 .ruff_cache/
 .env
 .env.example
+.env.example2
 data/*.db
 data/*.db-journal
 data/*.db-wal
