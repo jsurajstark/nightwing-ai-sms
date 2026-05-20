@@ -27,8 +27,9 @@ def decide(parsed: dict | None, *, raw_body: str) -> RoutingOutcome:
     if (parsed.get("notes") or "").strip().lower() == "non_referral":
         return RoutingOutcome("spam", "model_marked_non_referral", _float(parsed.get("confidence")))
 
-    # Required for auto-route: patient name only (phone/service optional for demo routing)
-    required = ("patient_first_name", "patient_last_name")
+    # Required for auto-route: patient name only (phone/service optional for demo routing).
+    # Extraction is normalized to first_name / last_name before routing (see extraction_normalize).
+    required = ("first_name", "last_name")
     missing = [k for k in required if not _present(parsed.get(k))]
     if missing:
         return RoutingOutcome(

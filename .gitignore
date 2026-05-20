@@ -8,6 +8,8 @@ __pycache__/
 .env.example
 data/*.db
 data/*.db-journal
+data/*.db-wal
+data/*.db-shm
 .DS_Store
 *.egg-info/
 dist/

@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from fastapi import APIRouter, BackgroundTasks, Depends, Form, HTTPException, Request
+from fastapi import APIRouter, Depends, Form, HTTPException, Request
 from fastapi.responses import HTMLResponse, RedirectResponse
 from sqlalchemy.orm import Session
 
@@ -10,10 +10,13 @@ from sms_demo.config import Settings, get_settings
 from sms_demo.db import get_db
 from sms_demo.models import Intake
 from sms_demo.services.pipeline import (
-    complete_intake,
     create_intake,
+    intake_is_pending,
     intake_is_processing,
+    intake_is_queued,
     list_intakes_for_console,
+    llm_extraction_label,
+    schedule_intake_extraction,
 )
 from sms_demo.templating import templates
 
@@ -49,6 +52,9 @@ def console(
 
     intakes = list_intakes_for_console(db)
     has_processing = any(intake_is_processing(i) for i in intakes)
+    has_queued = any(intake_is_queued(i) for i in intakes)
+    active_intake_id = next((i.id for i in intakes if intake_is_processing(i)), None)
+    refresh_secs = 10 if (has_processing or has_queued) else 30
     return templates.TemplateResponse(
         request,
         "console.html",
@@ -58,20 +64,24 @@ def console(
             "hint": hint,
             "twilio_enabled": settings.enable_twilio_webhook,
             "has_processing": has_processing,
+            "has_queued": has_queued,
+            "active_intake_id": active_intake_id,
+            "queue_backend": settings.queue_backend,
+            "refresh_secs": refresh_secs,
+            "llm_extraction_label": llm_extraction_label(settings),
         },
     )
 
 
 @router.post("/simulate")
 def simulate(
-    background_tasks: BackgroundTasks,
     sms_body: str = Form(""),
     db: Session = Depends(get_db),
     settings: Settings = Depends(get_settings),
 ):
     intake = create_intake(db, settings, sms_body, source="console")
-    if intake_is_processing(intake):
-        background_tasks.add_task(complete_intake, intake.id)
+    if intake_is_pending(intake):
+        schedule_intake_extraction(intake.id)
         return RedirectResponse(url=f"/demo/console?submitted={intake.id}", status_code=303)
     return RedirectResponse(url="/demo/console", status_code=303)
 

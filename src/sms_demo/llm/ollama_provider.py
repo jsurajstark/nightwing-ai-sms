@@ -15,7 +15,14 @@ class OllamaProvider(LLMProvider):
         self._model = model
         self._timeout = timeout_s
 
-    def extract_referral(self, sms_body: str, system_prompt: str) -> dict:
+    def extract_referral(
+        self,
+        sms_body: str,
+        system_prompt: str,
+        *,
+        timeout_s: float | None = None,
+    ) -> dict:
+        request_timeout = timeout_s if timeout_s is not None else self._timeout
         url = f"{self._host}/api/chat"
         payload = {
             "model": self._model,
@@ -28,15 +35,16 @@ class OllamaProvider(LLMProvider):
         }
         preview = (sms_body or "").replace("\n", " ")[:120]
         logger.info(
-            "Ollama request → POST %s model=%s sms_chars=%d preview=%r",
+            "Ollama request → POST %s model=%s timeout_s=%.0f sms_chars=%d preview=%r",
             url,
             self._model,
+            request_timeout,
             len(sms_body or ""),
             preview,
         )
         started = time.perf_counter()
         try:
-            with httpx.Client(timeout=self._timeout) as client:
+            with httpx.Client(timeout=request_timeout) as client:
                 r = client.post(url, json=payload)
                 r.raise_for_status()
                 data = r.json()

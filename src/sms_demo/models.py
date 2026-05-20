@@ -21,6 +21,12 @@ class Intake(Base):
     raw_body: Mapped[str] = mapped_column(Text)
     source: Mapped[str] = mapped_column(String(32))  # console | twilio
     external_id: Mapped[str | None] = mapped_column(String(128), nullable=True)
+    processing_completed_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
+    processing_duration_ms: Mapped[float | None] = mapped_column(Float, nullable=True)
+    # queued → waiting for worker; processing → LLM running; complete → done
+    pipeline_status: Mapped[str | None] = mapped_column(String(16), nullable=True)
 
     extractions: Mapped[list[Extraction]] = relationship(
         back_populates="intake",
@@ -46,6 +52,7 @@ class Extraction(Base):
     raw_json: Mapped[str | None] = mapped_column(Text, nullable=True)
     parsed_json: Mapped[str | None] = mapped_column(Text, nullable=True)
     error: Mapped[str | None] = mapped_column(Text, nullable=True)
+    llm_duration_ms: Mapped[float | None] = mapped_column(Float, nullable=True)
 
     intake: Mapped[Intake] = relationship(back_populates="extractions")
 
@@ -67,7 +74,7 @@ class PartialReferral(Base):
 
     id: Mapped[int] = mapped_column(primary_key=True, autoincrement=True)
     intake_id: Mapped[int] = mapped_column(ForeignKey("intakes.id", ondelete="CASCADE"))
-    referral_id: Mapped[str] = mapped_column(String(64))
+    referral_id: Mapped[str | None] = mapped_column(String(64), nullable=True)
     status: Mapped[str] = mapped_column(String(64))
     stub_response_json: Mapped[str] = mapped_column(Text)
 

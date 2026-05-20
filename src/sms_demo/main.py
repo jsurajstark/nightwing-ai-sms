@@ -7,14 +7,16 @@ from sms_demo.logging_config import configure_logging
 
 configure_logging()
 
-from sms_demo.db import get_engine
-from sms_demo.models import Base
+from sms_demo.db import init_database
 from sms_demo.routers import demo, health, stub_core, twilio_webhook
 
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    Base.metadata.create_all(bind=get_engine())
+    init_database()
+    from sms_demo.services.pipeline import recover_queued_intakes
+
+    recover_queued_intakes()
     yield
 
 

@@ -1,10 +1,13 @@
-<article class="rounded-lg border border-slate-800 bg-slate-900/40 p-4 shadow-sm{% if intake_is_processing(intake) %} border-sky-800/80{% endif %}">
+<article class="rounded-lg border border-slate-800 bg-slate-900/40 p-4 shadow-sm{% if intake_is_processing(intake) %} border-sky-800/80{% elif intake_is_queued(intake) %} border-amber-800/60{% endif %}">
   <div class="mb-3 flex flex-wrap items-center justify-between gap-2 text-xs text-slate-400">
     <span>#{{ intake.id }} · {{ intake.source }}{% if intake.external_id %} · {{ intake.external_id }}{% endif %}</span>
     <div class="flex items-center gap-3">
-      {% if intake_is_processing(intake) %}
+      {% if intake_is_queued(intake) %}
+        <span class="inline-flex rounded-full bg-amber-900/60 px-2 py-0.5 text-xs font-medium text-amber-200">In queue</span>
+      {% elif intake_is_processing(intake) %}
         <span class="inline-flex rounded-full bg-sky-900/60 px-2 py-0.5 text-xs font-medium text-sky-200">Processing</span>
       {% endif %}
+      <span class="text-slate-500" title="Submit → complete wall time; LLM time when finished">{{ intake_timing_summary(intake) }}</span>
       <span>{{ intake.created_at }}</span>
       <form method="post" action="/demo/intakes/{{ intake.id }}/delete" onsubmit="return confirm('Delete intake #{{ intake.id }}?');">
         <button type="submit" class="rounded border border-slate-600 px-2 py-0.5 text-xs text-slate-300 hover:border-rose-600 hover:text-rose-300">Delete</button>
@@ -14,7 +17,7 @@
 
   {% if intake_is_processing(intake) %}
     <div class="mb-4 space-y-2">
-      <p class="text-xs text-sky-300">Extracting referral fields with Ollama…</p>
+      <p class="text-xs text-sky-300">Extracting referral fields with {{ llm_extraction_label }}…</p>
       <div class="h-2 w-full overflow-hidden rounded-full bg-slate-800">
         <div class="demo-progress-bar h-full rounded-full bg-sky-500"></div>
       </div>
@@ -64,7 +67,7 @@
       {% endif %}
     </div>
     <div class="min-w-0 flex-1">
-      <h3 class="mb-1 text-xs font-semibold uppercase tracking-wide text-slate-500">Stub Core</h3>
+      <h3 class="mb-1 text-xs font-semibold uppercase tracking-wide text-slate-500">Core partial referral</h3>
       {% if intake_is_processing(intake) %}
         <p class="text-xs text-slate-500">Pending routing</p>
       {% else %}

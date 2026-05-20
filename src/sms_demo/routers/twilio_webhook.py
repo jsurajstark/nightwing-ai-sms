@@ -2,12 +2,12 @@ from __future__ import annotations
 
 from typing import Annotated
 
-from fastapi import APIRouter, BackgroundTasks, Depends, Form, HTTPException, Request, Response
+from fastapi import APIRouter, Depends, Form, HTTPException, Request, Response
 from sqlalchemy.orm import Session
 
 from sms_demo.config import Settings, get_settings
 from sms_demo.db import get_db
-from sms_demo.services.pipeline import complete_intake, create_intake, intake_is_processing
+from sms_demo.services.pipeline import create_intake, intake_is_pending, schedule_intake_extraction
 from sms_demo.services.twilio_signature import is_valid_twilio_request
 
 router = APIRouter(prefix="/webhooks/twilio", tags=["twilio"])
@@ -16,7 +16,6 @@ router = APIRouter(prefix="/webhooks/twilio", tags=["twilio"])
 @router.post("/sms")
 async def twilio_sms(
     request: Request,
-    background_tasks: BackgroundTasks,
     db: Annotated[Session, Depends(get_db)],
     settings: Annotated[Settings, Depends(get_settings)],
     Body: Annotated[str, Form()] = "",
@@ -57,8 +56,8 @@ async def twilio_sms(
         raise HTTPException(status_code=403, detail="Invalid Twilio signature")
 
     intake = create_intake(db, settings, Body, source="twilio", external_id=MessageSid)
-    if intake_is_processing(intake):
-        background_tasks.add_task(complete_intake, intake.id)
+    if intake_is_pending(intake):
+        schedule_intake_extraction(intake.id)
 
     # Twilio expects TwiML or empty 200
     return Response(content='<?xml version="1.0" encoding="UTF-8"?><Response></Response>', media_type="application/xml")

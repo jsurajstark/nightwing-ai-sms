@@ -1,9 +1,10 @@
 from collections.abc import Generator
 
-from sqlalchemy import create_engine, event
+from sqlalchemy import create_engine, event, inspect, text
 from sqlalchemy.orm import Session, sessionmaker
 
 from sms_demo.config import get_settings
+from sms_demo.models import Base
 
 _engine = None
 _SessionLocal = None
@@ -51,3 +52,47 @@ def get_db() -> Generator[Session, None, None]:
         yield db
     finally:
         db.close()
+
+
+def _sqlite_column_names(conn, table: str) -> set[str]:
+    rows = conn.execute(text(f"PRAGMA table_info({table})")).fetchall()
+    return {row[1] for row in rows}
+
+
+def _migrate_sqlite(conn) -> None:
+    """Add columns introduced after initial demo schema (no Alembic)."""
+    intake_cols = _sqlite_column_names(conn, "intakes")
+    if "pipeline_status" not in intake_cols:
+        conn.execute(text("ALTER TABLE intakes ADD COLUMN pipeline_status VARCHAR(16)"))
+    if "processing_completed_at" not in intake_cols:
+        conn.execute(
+            text("ALTER TABLE intakes ADD COLUMN processing_completed_at DATETIME")
+        )
+    if "processing_duration_ms" not in intake_cols:
+        conn.execute(text("ALTER TABLE intakes ADD COLUMN processing_duration_ms FLOAT"))
+
+    extraction_cols = _sqlite_column_names(conn, "extractions")
+    if "llm_duration_ms" not in extraction_cols:
+        conn.execute(text("ALTER TABLE extractions ADD COLUMN llm_duration_ms FLOAT"))
+
+    # Backfill: pending intakes (no routing) → queued for worker recovery
+    conn.execute(
+        text(
+            """
+            UPDATE intakes
+            SET pipeline_status = 'queued'
+            WHERE pipeline_status IS NULL
+              AND trim(coalesce(raw_body, '')) != ''
+              AND id NOT IN (SELECT intake_id FROM routing_decisions)
+            """
+        )
+    )
+
+
+def init_database() -> None:
+    engine = get_engine()
+    Base.metadata.create_all(bind=engine)
+    if engine.dialect.name == "sqlite":
+        with engine.begin() as conn:
+            if inspect(conn).has_table("intakes"):
+                _migrate_sqlite(conn)
