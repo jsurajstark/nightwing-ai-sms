@@ -1,4 +1,4 @@
-.PHONY: demo demo-ollama demo-gemini worker ollama-pull seed seed-ollama seed-gemini reset test-twilio-webhook test-e2e-sms
+.PHONY: demo demo-ollama demo-gemini demo-github worker ollama-pull seed seed-ollama seed-gemini seed-github reset test-twilio-webhook test-e2e-sms
 
 # Use an activated Python 3.12+ venv (e.g. source .../fastapi_ai_venv_3.12/bin/activate)
 # so `python` resolves to the env that has dependencies installed (`pip install -e .`).
@@ -15,6 +15,9 @@ demo-ollama:
 
 demo-gemini:
 	LLM_PROVIDER=gemini $(UVICORN)
+
+demo-github:
+	LLM_PROVIDER=github $(UVICORN)
 
 # Celery worker (requires Redis at REDIS_URL). One concurrent LLM job per worker.
 CELERY = python -m celery -A sms_demo.celery_app:celery_app worker --loglevel=info --concurrency=1 -Q sms_extraction
@@ -33,6 +36,9 @@ seed-ollama:
 
 seed-gemini:
 	LLM_PROVIDER=gemini python scripts/seed_samples.py
+
+seed-github:
+	LLM_PROVIDER=github python scripts/seed_samples.py
 
 reset:
 	python scripts/reset_db.py

@@ -48,22 +48,35 @@ LLM calls log in the **worker** terminal (`make worker`), not the API. Set `LOG_
 
 Demo uses **Celery + Redis**. For production, set `QUEUE_BACKEND=sqs`, `SQS_QUEUE_URL`, install `pip install -e ".[sqs]"`, and deploy a consumer that calls `complete_intake(intake_id)` (see `src/sms_demo/workers/sqs_handler.py`).
 
-### Switch Ollama ↔ Gemini
+### Switch LLM provider
 
-Keep **both** provider blocks in `.env`; change only:
+Keep all provider blocks in `.env`; change only `LLM_PROVIDER`:
 
 ```env
-LLM_PROVIDER=ollama   # local
-# LLM_PROVIDER=gemini  # API (needs GOOGLE_API_KEY)
+LLM_PROVIDER=ollama   # local Ollama
+# LLM_PROVIDER=gemini  # Google AI (GOOGLE_API_KEY)
+# LLM_PROVIDER=github  # GitHub Models (GITHUB_MODELS_TOKEN)
 ```
+
+**GitHub Models (default: Phi-4 mini instruct):** Phi-3 models are no longer in the [catalog](https://models.github.ai/catalog/models). Create a [GitHub PAT](https://github.com/settings/tokens) with **`models`** scope (fine-grained: **Models → Read**), then:
+
+```env
+LLM_PROVIDER=github
+GITHUB_MODELS_TOKEN=ghp_...
+GITHUB_MODELS_MODEL=microsoft/phi-4-mini-instruct
+```
+
+Browse other models at [github.com/marketplace/models](https://github.com/marketplace/models).
 
 Or override for one run without editing `.env`:
 
 ```bash
 make demo-ollama    # local
-make demo-gemini    # API
+make demo-gemini    # Google
+make demo-github    # GitHub Models (Phi-4 mini)
 make seed-ollama
 make seed-gemini
+make seed-github
 ```
 
 SMS body may be in **any language** (or mixed). The model is instructed to parse multilingual text and return the same JSON field names; use **Try Spanish** on the console for a sample.
@@ -121,9 +134,9 @@ Set `CORE_PARTIAL_REFERRAL_ENABLED=false` (or leave token empty) to use the in-p
 
 - `make demo` — API server (uses `LLM_PROVIDER` from `.env`)
 - `make worker` — Celery worker (Redis + one LLM job at a time)
-- `make demo-ollama` / `make demo-gemini` — same server, force provider for this run
+- `make demo-ollama` / `make demo-gemini` / `make demo-github` — same server, force provider for this run
 - `make ollama-pull` — pull default Ollama model
-- `make seed` — samples using `.env` provider; `make seed-ollama` / `make seed-gemini` to force
+- `make seed` — samples using `.env` provider; `make seed-ollama` / `make seed-gemini` / `make seed-github` to force
 - `make reset` — truncate demo tables
 - `make test-twilio-webhook` — signed POST to `/webhooks/twilio/sms` (local + `PUBLIC_BASE_URL`; needs `make demo` running)
 - `make test-e2e-sms` — full pipeline SMS → LLM → Core partial-referral (no server required)

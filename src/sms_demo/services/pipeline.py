@@ -104,6 +104,8 @@ def _model_name(settings: Settings) -> str:
         return settings.ollama_model
     if provider == "gemini":
         return settings.gemini_model
+    if provider in ("github", "github_models"):
+        return settings.github_models_model
     return settings.llm_provider or "unknown"
 
 
@@ -112,6 +114,8 @@ def llm_extraction_label(settings: Settings) -> str:
     provider = (settings.llm_provider or "ollama").lower()
     if provider == "gemini":
         return f"Gemini ({settings.gemini_model})"
+    if provider in ("github", "github_models"):
+        return f"GitHub Models ({settings.github_models_model})"
     if provider == "ollama":
         return f"Ollama ({settings.ollama_model})"
     return _model_name(settings)

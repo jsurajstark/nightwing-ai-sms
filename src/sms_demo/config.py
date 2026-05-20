@@ -18,6 +18,12 @@ class Settings(BaseSettings):
     google_api_key: str | None = None
     gemini_model: str = "gemini-2.0-flash"
 
+    # GitHub Models (PAT with `models` scope — https://github.com/settings/tokens)
+    github_models_token: str | None = None
+    # Phi-3* models removed from catalog; use phi-4-mini-instruct (see GET models.github.ai/catalog/models)
+    github_models_model: str = "microsoft/phi-4-mini-instruct"
+    github_models_base_url: str = "https://models.github.ai/inference/chat/completions"
+
     llm_timeout_s: float = 180.0
     llm_max_retries: int = 2
     llm_timeout_increment_s: float = 30.0
@@ -54,6 +60,7 @@ class Settings(BaseSettings):
         "celery_result_backend",
         "sqs_queue_url",
         "core_api_access_token",
+        "github_models_token",
         mode="before",
     )
     @classmethod
