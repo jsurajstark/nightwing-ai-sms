@@ -87,6 +87,33 @@ def _migrate_sqlite(conn) -> None:
             """
         )
     )
+    # Fix rows where extraction finished but status was left queued/processing
+    conn.execute(
+        text(
+            """
+            UPDATE intakes
+            SET pipeline_status = 'complete'
+            WHERE pipeline_status IN ('queued', 'processing')
+              AND id IN (SELECT intake_id FROM routing_decisions)
+            """
+        )
+    )
+    conn.execute(
+        text(
+            """
+            UPDATE intakes
+            SET processing_completed_at = COALESCE(processing_completed_at, created_at),
+                processing_duration_ms = COALESCE(
+                    processing_duration_ms,
+                    (julianday(COALESCE(processing_completed_at, created_at))
+                     - julianday(created_at)) * 86400000.0
+                )
+            WHERE pipeline_status = 'complete'
+              AND id IN (SELECT intake_id FROM routing_decisions)
+              AND processing_completed_at IS NULL
+            """
+        )
+    )
 
 
 def init_database() -> None:

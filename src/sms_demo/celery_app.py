@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from celery import Celery
+from celery.signals import worker_ready
 
 from sms_demo.config import get_settings
 
@@ -30,3 +31,11 @@ celery_app.conf.update(
         "sms_demo.tasks.extraction.extract_intake": {"queue": settings.celery_queue_name},
     },
 )
+
+
+@worker_ready.connect
+def _recover_on_worker_ready(sender, **kwargs) -> None:
+    """Re-enqueue pending intakes once when Celery worker starts (not on API reload)."""
+    from sms_demo.services.pipeline import recover_queued_intakes
+
+    recover_queued_intakes()

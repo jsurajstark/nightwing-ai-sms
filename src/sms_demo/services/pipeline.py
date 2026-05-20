@@ -8,13 +8,13 @@ from pathlib import Path
 from sqlalchemy import select
 from sqlalchemy.orm import Session, sessionmaker, selectinload
 
-from sms_demo.config import Settings, get_settings
+from sms_demo.config import Settings, get_settings, reload_settings
 from sms_demo.db import get_engine
 from sms_demo.llm import LLMError, get_provider
 from sms_demo.llm.retry import extract_with_retries
 from sms_demo.models import Extraction, Intake, PartialReferral, RoutingDecision
 from sms_demo.services.extraction_normalize import normalize_extraction
-from sms_demo.services.name_extract import reconcile_extraction_names
+from sms_demo.services.name_extract import extracted_names_match_raw
 from sms_demo.services.phone_extract import reconcile_extraction_phones
 from sms_demo.services.llm_queue import llm_extraction_lock
 from sms_demo.services.routing import RoutingOutcome, decide
@@ -98,12 +98,20 @@ def _persist_partial_referral(
     )
 
 
-def _model_name(settings: Settings) -> str:
-    provider = (settings.llm_provider or "").lower()
-    if provider == "ollama":
-        return settings.ollama_model
-    if provider == "gemini":
-        return settings.gemini_model
+def _model_name(settings: Settings, provider: object | None = None) -> str:
+    if provider is not None:
+        used = getattr(provider, "last_model_used", None)
+        if used:
+            return str(used)
+    provider_key = (settings.llm_provider or "").lower()
+    if provider_key == "ollama":
+        return settings.ollama_model or "unknown"
+    if provider_key == "gemini":
+        return settings.gemini_model or "unknown"
+    if provider_key == "openrouter":
+        return settings.openrouter_model or "unknown"
+    if provider_key == "github":
+        return settings.github_models_model or "unknown"
     return settings.llm_provider or "unknown"
 
 
@@ -111,9 +119,21 @@ def llm_extraction_label(settings: Settings) -> str:
     """Display name for console UI while extraction runs."""
     provider = (settings.llm_provider or "ollama").lower()
     if provider == "gemini":
-        return f"Gemini ({settings.gemini_model})"
+        return f"Gemini ({settings.gemini_model or 'unset'})"
+    if provider == "openrouter":
+        chain = settings.openrouter_model_chain
+        label = chain[0] if chain else (settings.openrouter_model or "unset")
+        if len(chain) > 1:
+            return f"OpenRouter ({label} + {len(chain) - 1} fallback(s))"
+        return f"OpenRouter ({label})"
+    if provider == "github":
+        chain = settings.github_models_model_chain
+        label = chain[0] if chain else (settings.github_models_model or "unset")
+        if len(chain) > 1:
+            return f"GitHub Models ({label} + {len(chain) - 1} fallback(s))"
+        return f"GitHub Models ({label})"
     if provider == "ollama":
-        return f"Ollama ({settings.ollama_model})"
+        return f"Ollama ({settings.ollama_model or 'unset'})"
     return _model_name(settings)
 
 
@@ -123,10 +143,70 @@ PIPELINE_COMPLETE = "complete"
 
 
 def intake_is_pending(intake: Intake) -> bool:
-    """True while extraction has not finished (saved intake, no routing yet)."""
+    """True while extraction has not finished (no extraction row yet)."""
     if not (intake.raw_body or "").strip():
         return False
-    return len(intake.routing_decisions) == 0
+    return len(intake.extractions) == 0
+
+
+def display_extraction(intake: Intake) -> Extraction | None:
+    """Best extraction row for console display (prefer names that match raw SMS)."""
+    if not intake.extractions:
+        return None
+    raw = intake.raw_body or ""
+    first_attempt: Extraction | None = None
+    for ext in intake.extractions:
+        if first_attempt is None:
+            first_attempt = ext
+        if ext.error or not ext.parsed_json:
+            continue
+        try:
+            parsed = json.loads(ext.parsed_json)
+        except json.JSONDecodeError:
+            continue
+        if isinstance(parsed, dict) and extracted_names_match_raw(raw, parsed):
+            return ext
+    return first_attempt
+
+
+def display_routing(intake: Intake) -> RoutingDecision | None:
+    """Routing decision paired with the displayed extraction attempt."""
+    if not intake.routing_decisions:
+        return None
+    ext = display_extraction(intake)
+    if ext is None:
+        return intake.routing_decisions[-1]
+    try:
+        idx = intake.extractions.index(ext)
+    except ValueError:
+        return intake.routing_decisions[-1]
+    if idx < len(intake.routing_decisions):
+        return intake.routing_decisions[idx]
+    return intake.routing_decisions[-1]
+
+
+def display_partial_referral(intake: Intake) -> PartialReferral | None:
+    """Core partial referral only when displayed routing is auto."""
+    rd = display_routing(intake)
+    if rd is None or rd.decision != "auto":
+        return None
+    return intake.partial_referrals[-1] if intake.partial_referrals else None
+
+
+def intake_preview(raw: str, *, max_len: int = 32) -> str:
+    """One-line snippet for console intake chips."""
+    one_line = " ".join((raw or "").split())
+    if len(one_line) <= max_len:
+        return one_line
+    return one_line[: max_len - 1] + "…"
+
+
+def intake_is_finished(intake_id: int) -> bool:
+    """True when an extraction row exists; used to skip duplicate queue jobs."""
+    Session = sessionmaker(bind=get_engine())
+    with Session() as db:
+        intake = get_intake_with_relations(db, intake_id)
+        return intake is not None and len(intake.extractions) > 0
 
 
 def intake_is_queued(intake: Intake) -> bool:
@@ -161,27 +241,96 @@ def intake_timing_summary(intake: Intake) -> str:
 
 
 def _mark_intake_complete(
+    db: Session,
     intake: Intake,
     *,
     llm_duration_ms: float | None = None,
 ) -> None:
-    intake.pipeline_status = PIPELINE_COMPLETE
+    """Persist pipeline_status=complete via explicit UPDATE (reliable across Celery fork sessions)."""
+    from sqlalchemy import update
+
     completed_at = utc_now()
-    intake.processing_completed_at = completed_at
-    intake.processing_duration_ms = wall_duration_ms(intake.created_at, completed_at)
+    duration = wall_duration_ms(intake.created_at, completed_at)
+    db.execute(
+        update(Intake)
+        .where(Intake.id == intake.id)
+        .values(
+            pipeline_status=PIPELINE_COMPLETE,
+            processing_completed_at=completed_at,
+            processing_duration_ms=duration,
+        )
+    )
+    db.flush()
+    if intake in db:
+        db.refresh(intake)
     if llm_duration_ms is not None:
         logger.info(
             "Intake timing intake_id=%s total=%.0fms llm=%.0fms",
             intake.id,
-            intake.processing_duration_ms,
+            duration,
             llm_duration_ms,
         )
     else:
-        logger.info(
-            "Intake timing intake_id=%s total=%.0fms",
-            intake.id,
-            intake.processing_duration_ms,
+        logger.info("Intake timing intake_id=%s total=%.0fms", intake.id, duration)
+
+
+def backfill_intake_completion(db: Session, intake_id: int) -> None:
+    """Fix rows that have routing but pipeline_status still queued/processing or missing timing."""
+    from sqlalchemy import update
+
+    intake = db.get(Intake, intake_id)
+    if intake is None:
+        return
+    if intake.pipeline_status == PIPELINE_COMPLETE and intake.processing_completed_at is not None:
+        return
+    completed_at = intake.processing_completed_at or utc_now()
+    duration = intake.processing_duration_ms
+    if duration is None and intake.created_at is not None:
+        duration = wall_duration_ms(intake.created_at, completed_at)
+    db.execute(
+        update(Intake)
+        .where(Intake.id == intake_id)
+        .values(
+            pipeline_status=PIPELINE_COMPLETE,
+            processing_completed_at=completed_at,
+            processing_duration_ms=duration,
         )
+    )
+    db.flush()
+
+
+def reconcile_pipeline_status(db: Session) -> int:
+    """Fix intakes that finished extraction but pipeline_status was left queued/processing."""
+    from sqlalchemy import update
+
+    result = db.execute(
+        update(Intake)
+        .where(Intake.pipeline_status.in_((PIPELINE_QUEUED, PIPELINE_PROCESSING)))
+        .where(Intake.id.in_(select(RoutingDecision.intake_id)))
+        .values(pipeline_status=PIPELINE_COMPLETE)
+    )
+    db.commit()
+    count = result.rowcount or 0
+    pending = list(
+        db.scalars(
+            select(Intake.id).where(
+                Intake.pipeline_status == PIPELINE_COMPLETE,
+                Intake.processing_completed_at.is_(None),
+                Intake.id.in_(select(RoutingDecision.intake_id)),
+            )
+        ).all()
+    )
+    for intake_id in pending:
+        backfill_intake_completion(db, intake_id)
+    if pending:
+        db.commit()
+    if count or pending:
+        logger.info(
+            "Reconciled pipeline_status for %s intake(s); backfilled timing for %s",
+            count,
+            len(pending),
+        )
+    return count + len(pending)
 
 
 def _persist_empty_intake(db: Session, settings: Settings, intake: Intake, raw: str) -> Intake:
@@ -204,8 +353,7 @@ def _persist_empty_intake(db: Session, settings: Settings, intake: Intake, raw: 
             confidence=route.confidence,
         )
     )
-    intake.pipeline_status = PIPELINE_COMPLETE
-    _mark_intake_complete(intake)
+    _mark_intake_complete(db, intake)
     db.flush()
     db.commit()
     db.refresh(intake)
@@ -226,10 +374,12 @@ def _run_llm_phase(db: Session, settings: Settings, intake: Intake, raw: str) ->
     llm_routing_reason: str | None = None
     raw_model_json: str | None = None
     llm_duration_ms: float | None = None
+    model_used = _model_name(settings)
 
     llm_started = time.perf_counter()
     try:
         parsed = extract_with_retries(provider, raw, system_prompt, settings)
+        model_used = _model_name(settings, provider)
         parsed = normalize_extraction(parsed)
         parsed = reconcile_extraction_names(raw, parsed)
         parsed = reconcile_extraction_phones(raw, parsed)
@@ -256,7 +406,7 @@ def _run_llm_phase(db: Session, settings: Settings, intake: Intake, raw: str) ->
         Extraction(
             intake_id=intake.id,
             model_provider=settings.llm_provider,
-            model_name=_model_name(settings),
+            model_name=model_used,
             raw_json=raw_model_json,
             parsed_json=raw_model_json,
             error=extraction_error,
@@ -294,7 +444,7 @@ def _run_llm_phase(db: Session, settings: Settings, intake: Intake, raw: str) ->
     if route.decision == "auto" and parsed is not None:
         _persist_partial_referral(db, settings, intake.id, parsed, sms_text=raw)
 
-    _mark_intake_complete(intake, llm_duration_ms=llm_duration_ms)
+    _mark_intake_complete(db, intake, llm_duration_ms=llm_duration_ms)
 
 
 def create_intake(
@@ -328,6 +478,9 @@ def create_intake(
 
 def schedule_intake_extraction(intake_id: int) -> None:
     """Enqueue extraction (Celery+Redis demo, or SQS in production)."""
+    if intake_is_finished(intake_id):
+        logger.info("Skip enqueue intake_id=%s — already extracted", intake_id)
+        return
     from sms_demo.queue import enqueue_extraction
 
     enqueue_extraction(intake_id)
@@ -336,34 +489,42 @@ def schedule_intake_extraction(intake_id: int) -> None:
 def complete_intake(intake_id: int) -> None:
     """Finish LLM extraction + routing (serialized — one LLM call at a time)."""
     logger.info("Extraction worker start intake_id=%s", intake_id)
-    settings = get_settings()
+    settings = reload_settings()
+    logger.info(
+        "Extraction settings intake_id=%s llm_provider=%s model=%s",
+        intake_id,
+        settings.llm_provider,
+        _model_name(settings),
+    )
     Session = sessionmaker(bind=get_engine())
 
     with llm_extraction_lock():
-        with Session() as db:
-            intake = db.get(Intake, intake_id)
-            if intake is None:
-                logger.warning("Background extraction skipped: intake_id=%s not found", intake_id)
-                return
-            if not intake_is_pending(intake):
-                logger.info("Background extraction skipped: intake_id=%s already complete", intake_id)
-                return
-            intake.pipeline_status = PIPELINE_PROCESSING
-            db.commit()
-            logger.info("LLM slot acquired intake_id=%s", intake_id)
-
         try:
             with Session() as db:
-                intake = db.get(Intake, intake_id)
-                if intake is None or not intake_is_pending(intake):
+                intake = get_intake_with_relations(db, intake_id)
+                if intake is None:
+                    logger.warning(
+                        "Background extraction skipped: intake_id=%s not found", intake_id
+                    )
                     return
+                if len(intake.extractions) > 0:
+                    backfill_intake_completion(db, intake_id)
+                    db.commit()
+                    logger.info(
+                        "Background extraction skipped: intake_id=%s already has extraction",
+                        intake_id,
+                    )
+                    return
+                intake.pipeline_status = PIPELINE_PROCESSING
+                db.flush()
+                logger.info("LLM slot acquired intake_id=%s", intake_id)
                 _run_llm_phase(db, settings, intake, intake.raw_body)
                 db.commit()
         except Exception as exc:
             logger.exception("Background extraction failed intake_id=%s", intake_id)
             with Session() as db:
-                intake = db.get(Intake, intake_id)
-                if intake is None or not intake_is_pending(intake):
+                intake = get_intake_with_relations(db, intake_id)
+                if intake is None or len(intake.extractions) > 0:
                     raise
                 db.add(
                     Extraction(
@@ -383,7 +544,7 @@ def complete_intake(intake_id: int) -> None:
                         confidence=None,
                     )
                 )
-                _mark_intake_complete(intake)
+                _mark_intake_complete(db, intake)
                 db.commit()
             raise
 
@@ -391,10 +552,15 @@ def complete_intake(intake_id: int) -> None:
 
 
 def recover_queued_intakes() -> None:
-    """Re-enqueue intakes left queued after API or broker restart."""
+    """Re-enqueue intakes left queued after API or broker restart (not already extracted)."""
     Session = sessionmaker(bind=get_engine())
     with Session() as db:
-        stmt = select(Intake.id).where(Intake.pipeline_status == PIPELINE_QUEUED)
+        reconcile_pipeline_status(db)
+        stmt = (
+            select(Intake.id)
+            .where(Intake.pipeline_status == PIPELINE_QUEUED)
+            .where(~Intake.id.in_(select(Extraction.intake_id)))
+        )
         intake_ids = list(db.scalars(stmt).all())
     for intake_id in intake_ids:
         logger.info("Recovering queued intake_id=%s", intake_id)
@@ -412,8 +578,10 @@ def run_intake(
     """Synchronous full pipeline (seed script, tests)."""
     intake = create_intake(db, settings, raw, source=source, external_id=external_id)
     if intake_is_pending(intake):
+        intake = get_intake_with_relations(db, intake.id)
+        assert intake is not None
         intake.pipeline_status = PIPELINE_PROCESSING
-        db.commit()
+        db.flush()
         _run_llm_phase(db, settings, intake, raw)
         db.commit()
         db.refresh(intake)
@@ -432,3 +600,80 @@ def list_intakes_for_console(db: Session, limit: int = 50) -> list[Intake]:
         .limit(limit)
     )
     return list(db.scalars(stmt).all())
+
+
+def get_intake_with_relations(db: Session, intake_id: int) -> Intake | None:
+    stmt = (
+        select(Intake)
+        .options(
+            selectinload(Intake.extractions),
+            selectinload(Intake.routing_decisions),
+            selectinload(Intake.partial_referrals),
+        )
+        .where(Intake.id == intake_id)
+    )
+    return db.scalars(stmt).first()
+
+
+def intake_to_api_dict(intake: Intake) -> dict:
+    """JSON-serializable intake snapshot for live console polling."""
+    ext = display_extraction(intake)
+    rd = display_routing(intake)
+    pr = display_partial_referral(intake)
+
+    if rd is not None:
+        status = "complete"
+        pipeline_status = PIPELINE_COMPLETE
+    elif intake_is_queued(intake):
+        status = "queued"
+        pipeline_status = intake.pipeline_status
+    elif intake_is_processing(intake):
+        status = "processing"
+        pipeline_status = intake.pipeline_status
+    elif intake_is_pending(intake):
+        status = "pending"
+        pipeline_status = intake.pipeline_status
+    else:
+        status = "complete"
+        pipeline_status = PIPELINE_COMPLETE
+
+    parsed = None
+    if ext and ext.parsed_json:
+        try:
+            parsed = json.loads(ext.parsed_json)
+        except json.JSONDecodeError:
+            parsed = ext.parsed_json
+
+    core = None
+    if pr and pr.stub_response_json:
+        try:
+            core = json.loads(pr.stub_response_json)
+        except json.JSONDecodeError:
+            core = pr.stub_response_json
+
+    return {
+        "id": intake.id,
+        "created_at": str(intake.created_at),
+        "source": intake.source,
+        "raw_body": intake.raw_body,
+        "preview": intake_preview(intake.raw_body or ""),
+        "status": status,
+        "pipeline_status": pipeline_status,
+        "timing": intake_timing_summary(intake),
+        "extraction": {
+            "provider": ext.model_provider if ext else None,
+            "model": ext.model_name if ext else None,
+            "parsed": parsed,
+            "error": ext.error if ext else None,
+        }
+        if ext
+        else None,
+        "routing": {
+            "decision": rd.decision,
+            "reason": rd.reason,
+            "confidence": rd.confidence,
+        }
+        if rd
+        else None,
+        "partial_referral": core,
+    }

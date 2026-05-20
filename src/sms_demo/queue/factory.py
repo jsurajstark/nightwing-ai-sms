@@ -28,7 +28,27 @@ def get_queue_backend() -> ExtractionQueueBackend:
     )
 
 
+def reset_queue_backend_cache() -> None:
+    """Clear cached backend after QUEUE_BACKEND changes in .env."""
+    get_queue_backend.cache_clear()
+
+
 def enqueue_extraction(intake_id: int) -> None:
     """Publish extraction job for intake_id."""
     logger.info("Enqueue extraction intake_id=%s backend=%s", intake_id, get_settings().queue_backend)
     get_queue_backend().enqueue_extraction(intake_id)
+
+
+def purge_extraction_queue() -> None:
+    """Drop pending Celery tasks (no-op for inline/sqs)."""
+    settings = get_settings()
+    if (settings.queue_backend or "").lower() != "celery":
+        return
+    try:
+        from sms_demo.celery_app import celery_app
+
+        queue = settings.celery_queue_name or "sms_extraction"
+        purged = celery_app.control.purge()
+        logger.info("Purged Celery queue=%s (approx %s message(s))", queue, purged)
+    except Exception as exc:
+        logger.warning("Could not purge Celery queue: %s", exc)

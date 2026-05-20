@@ -31,14 +31,17 @@ class Intake(Base):
     extractions: Mapped[list[Extraction]] = relationship(
         back_populates="intake",
         cascade="all, delete-orphan",
+        order_by="Extraction.id",
     )
     routing_decisions: Mapped[list[RoutingDecision]] = relationship(
         back_populates="intake",
         cascade="all, delete-orphan",
+        order_by="RoutingDecision.id",
     )
     partial_referrals: Mapped[list[PartialReferral]] = relationship(
         back_populates="intake",
         cascade="all, delete-orphan",
+        order_by="PartialReferral.id",
     )
 
 

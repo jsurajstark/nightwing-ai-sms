@@ -48,6 +48,24 @@ class OllamaProvider(LLMProvider):
                 r = client.post(url, json=payload)
                 r.raise_for_status()
                 data = r.json()
+        except httpx.HTTPStatusError as e:
+            elapsed_ms = (time.perf_counter() - started) * 1000
+            if e.response.status_code == 404:
+                detail = (
+                    f"Ollama model {self._model!r} not found (HTTP 404). "
+                    f"Run: ollama pull {self._model} — or set OLLAMA_MODEL to an installed model "
+                    f"(see: ollama list). Or set LLM_PROVIDER=openrouter in .env."
+                )
+                try:
+                    body = e.response.json()
+                    if isinstance(body, dict) and body.get("error"):
+                        detail = f"{detail} Ollama says: {body['error']}"
+                except Exception:
+                    pass
+                logger.error("Ollama model missing after %.0fms", elapsed_ms)
+                raise LLMError(detail) from e
+            logger.error("Ollama request failed after %.0fms: %s", elapsed_ms, e)
+            raise LLMError(str(e)) from e
         except httpx.HTTPError as e:
             elapsed_ms = (time.perf_counter() - started) * 1000
             logger.error("Ollama request failed after %.0fms: %s", elapsed_ms, e)

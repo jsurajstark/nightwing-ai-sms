@@ -4,10 +4,24 @@ from __future__ import annotations
 
 import re
 
-# "Patient Raj Patel", "Referral for Jane Doe", "pt. Maria Garcia", etc.
-_NAME_AFTER_LABEL = re.compile(
-    r"(?i)\b(?:patient|pt\.?|referral\s+for)\s+"
-    r"([A-Za-z\u00C0-\u024F][A-Za-z\u00C0-\u024F'.-]*(?:\s+[A-Za-z\u00C0-\u024F][A-Za-z\u00C0-\u024F'.-]*){0,3})"
+# Order matters: specific labels before generic "patient" (avoid "Patient Referral:" false match).
+_NAME_PATTERNS = (
+    re.compile(
+        r"(?i)\bnew\s+patient\s+referral\s*:\s*"
+        r"([A-Za-z\u00C0-\u024F][A-Za-z\u00C0-\u024F'.-]*(?:\s+[A-Za-z\u00C0-\u024F][A-Za-z\u00C0-\u024F'.-]*){0,3})"
+    ),
+    re.compile(
+        r"(?i)\breferral\s*:\s*"
+        r"([A-Za-z\u00C0-\u024F][A-Za-z\u00C0-\u024F'.-]*(?:\s+[A-Za-z\u00C0-\u024F][A-Za-z\u00C0-\u024F'.-]*){0,3})"
+    ),
+    re.compile(
+        r"(?i)\breferral\s+for\s+"
+        r"([A-Za-z\u00C0-\u024F][A-Za-z\u00C0-\u024F'.-]*(?:\s+[A-Za-z\u00C0-\u024F][A-Za-z\u00C0-\u024F'.-]*){0,3})"
+    ),
+    re.compile(
+        r"(?i)\b(?:patient|pt\.?)\s+(?!referral\b)"
+        r"([A-Za-z\u00C0-\u024F][A-Za-z\u00C0-\u024F'.-]*(?:\s+[A-Za-z\u00C0-\u024F][A-Za-z\u00C0-\u024F'.-]*){0,3})"
+    ),
 )
 
 # Words that follow a name in messy SMS (not part of the name).
@@ -20,7 +34,6 @@ _STOP_TOKENS = frozenset(
         "phone",
         "tel",
         "referred",
-        "referral",
         "for",
         "with",
         "at",
@@ -60,7 +73,11 @@ def _name_tokens(chunk: str) -> list[str]:
 def names_in_text(text: str) -> tuple[str | None, str | None]:
     if not text:
         return None, None
-    match = _NAME_AFTER_LABEL.search(text)
+    match = None
+    for pattern in _NAME_PATTERNS:
+        match = pattern.search(text)
+        if match:
+            break
     if not match:
         return None, None
     parts = _name_tokens(match.group(1))
@@ -75,6 +92,25 @@ def _token_in_text(token: str, text: str) -> bool:
     if not token or not text:
         return False
     return token.casefold() in text.casefold()
+
+
+def extracted_names_match_raw(raw: str, parsed: dict) -> bool:
+    """False when SMS clearly names a patient but extraction names are not in the message."""
+    if not isinstance(parsed, dict):
+        return True
+    raw_first, raw_last = names_in_text(raw)
+    if not raw_first:
+        return True
+    ext_first = parsed.get("first_name")
+    ext_last = parsed.get("last_name")
+    if not _present(ext_first):
+        return False
+    if not _token_in_text(str(ext_first), raw):
+        return False
+    if raw_last:
+        if not _present(ext_last) or not _token_in_text(str(ext_last), raw):
+            return False
+    return True
 
 
 def reconcile_extraction_names(raw: str, parsed: dict) -> dict:

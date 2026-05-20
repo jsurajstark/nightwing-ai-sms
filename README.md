@@ -1,6 +1,6 @@
 # Nightwing AI SMS demo
 
-**FastAPI** demo: console or Twilio inbound SMS (any language) → **Celery + Redis** extraction queue → **LLM JSON extraction** (local **Ollama** or **Google Gemini**) → routing (auto / review / spam) → **Nightwing Core** `POST /api/v1/partial-referral` (or local stub when disabled) → **SQLite** + Jinja2 console.
+**FastAPI** demo: console or Twilio inbound SMS (any language) → **Celery + Redis** extraction queue → **LLM JSON extraction** (local **Ollama**, **Google Gemini**, or **OpenRouter**) → routing (auto / review / spam) → **Nightwing Core** `POST /api/v1/partial-referral` (or local stub when disabled) → **SQLite** + Jinja2 console.
 
 Production path: swap `QUEUE_BACKEND=sqs` and run workers on **AWS SQS** (Lambda/ECS) — same `complete_intake` entrypoint.
 
@@ -18,6 +18,7 @@ This repository is **demo-only**. See [docs/KNOWN_GAPS.md](docs/KNOWN_GAPS.md) f
 - **Redis** ([install](https://redis.io/docs/latest/operate/oss_and_stack/install/install-redis/)) for the extraction queue (`redis-server` on `127.0.0.1:6379`)
 - **Ollama** ([install](https://ollama.com/)) if using local model — `ollama serve` + `make ollama-pull`
 - **Gemini** — [AI Studio API key](https://aistudio.google.com/apikey) in `.env` if using cloud model
+- **OpenRouter** — [API key](https://openrouter.ai/keys) in `.env` if using OpenRouter (e.g. `google/gemma-4-26b-a4b-it:free`)
 
 ## Quick start
 
@@ -48,22 +49,25 @@ LLM calls log in the **worker** terminal (`make worker`), not the API. Set `LOG_
 
 Demo uses **Celery + Redis**. For production, set `QUEUE_BACKEND=sqs`, `SQS_QUEUE_URL`, install `pip install -e ".[sqs]"`, and deploy a consumer that calls `complete_intake(intake_id)` (see `src/sms_demo/workers/sqs_handler.py`).
 
-### Switch Ollama ↔ Gemini
+### Switch LLM provider
 
-Keep **both** provider blocks in `.env`; change only:
+Keep all provider blocks in `.env`; change only `LLM_PROVIDER`:
 
 ```env
-LLM_PROVIDER=ollama   # local
-# LLM_PROVIDER=gemini  # API (needs GOOGLE_API_KEY)
+LLM_PROVIDER=ollama       # local
+# LLM_PROVIDER=gemini     # Google AI Studio (GOOGLE_API_KEY)
+# LLM_PROVIDER=openrouter # OpenRouter (OPENROUTER_API_KEY)
 ```
 
 Or override for one run without editing `.env`:
 
 ```bash
-make demo-ollama    # local
-make demo-gemini    # API
+make demo-ollama       # local
+make demo-gemini       # Google AI Studio
+make demo-openrouter   # OpenRouter
 make seed-ollama
 make seed-gemini
+make seed-openrouter
 ```
 
 SMS body may be in **any language** (or mixed). The model is instructed to parse multilingual text and return the same JSON field names; use **Try Spanish** on the console for a sample.
@@ -121,9 +125,10 @@ Set `CORE_PARTIAL_REFERRAL_ENABLED=false` (or leave token empty) to use the in-p
 
 - `make demo` — API server (uses `LLM_PROVIDER` from `.env`)
 - `make worker` — Celery worker (Redis + one LLM job at a time)
-- `make demo-ollama` / `make demo-gemini` — same server, force provider for this run
+- `make demo-ollama` / `make demo-gemini` / `make demo-openrouter` — same server, force provider for this run
 - `make ollama-pull` — pull default Ollama model
-- `make seed` — samples using `.env` provider; `make seed-ollama` / `make seed-gemini` to force
+- `make seed` — samples using `.env` provider; `make seed-ollama` / `make seed-gemini` / `make seed-openrouter` to force
+- `make migrate` — create/upgrade SQLite schema (`data/demo.db`)
 - `make reset` — truncate demo tables
 - `make test-twilio-webhook` — signed POST to `/webhooks/twilio/sms` (local + `PUBLIC_BASE_URL`; needs `make demo` running)
 - `make test-e2e-sms` — full pipeline SMS → LLM → Core partial-referral (no server required)

@@ -17,21 +17,26 @@
   <header class="mb-6 flex flex-wrap items-center justify-between gap-4 border-b border-slate-800 pb-4">
     <div>
       <h1 class="text-2xl font-semibold tracking-tight">SMS intake console</h1>
-      <p class="text-sm text-slate-400">Simulated intake + optional Twilio inbound ({{ "on" if twilio_enabled else "off" }}). Queue: <span class="text-slate-300">{{ queue_backend }}</span> — run <code class="text-xs">make worker</code> with Redis.</p>
+      <p class="text-sm text-slate-400">
+        Provider: <span class="text-sky-300">{{ llm_provider }}</span> ·
+        Queue: <span class="text-slate-300">{{ queue_backend }}</span> ·
+        Twilio: {{ "on" if twilio_enabled else "off" }}
+      </p>
+      <p class="text-xs text-slate-500 mt-1">{{ llm_extraction_label }} — run <code class="text-xs">make worker</code> with Redis.</p>
     </div>
     <div class="flex flex-wrap items-center gap-3">
       <div
         id="refresh-timer"
         class="rounded-md border border-slate-700 bg-slate-900/80 px-3 py-2 text-center min-w-[5.5rem]"
         data-refresh-seconds="{{ refresh_secs }}"
-        title="Page reloads automatically to show new intakes"
+        title="Page reloads automatically while intakes are queued or processing"
       >
         <p class="text-[10px] uppercase tracking-wide text-slate-500">Page refresh</p>
         <p class="text-lg font-semibold tabular-nums text-sky-300">
           <span id="refresh-countdown">{{ refresh_secs }}</span><span class="text-sm text-slate-400">s</span>
         </p>
       </div>
-      <form method="post" action="/demo/reset" onsubmit="return confirm('Clear all demo rows?');">
+      <form method="post" action="/demo/reset" onsubmit="return confirm('Clear all demo rows and flush the Celery queue?');">
         <button type="submit" class="rounded-md bg-rose-600 px-3 py-2 text-sm font-medium text-white hover:bg-rose-500">Reset</button>
       </form>
     </div>
@@ -39,7 +44,12 @@
 
   {% if has_processing or has_queued %}
     <p class="mb-4 rounded-md border border-sky-800 bg-sky-950/40 px-3 py-2 text-sm text-sky-200">
-      {% if has_processing %}Extraction in progress{% else %}Waiting in Celery queue{% endif %} — page reloads every <strong>{{ refresh_secs }}s</strong> until complete. Ensure <code class="text-xs">make worker</code> is running.
+      {% if has_processing %}
+        <strong>Extraction in progress</strong> with {{ llm_extraction_label }} —
+      {% else %}
+        <strong>Waiting in Celery queue</strong> —
+      {% endif %}
+      page reloads every <strong>{{ refresh_secs }}s</strong> until complete. Ensure <code class="text-xs">make worker</code> is running.
     </p>
   {% endif %}
 
@@ -47,10 +57,16 @@
     <p class="mb-4 rounded-md border border-amber-800 bg-amber-950/50 px-3 py-2 text-sm text-amber-200">{{ hint }}</p>
   {% endif %}
 
+  {% if submitted_id %}
+    <p class="mb-4 rounded-md border border-emerald-800 bg-emerald-950/40 px-3 py-2 text-sm text-emerald-200">
+      Submitted intake <strong>#{{ submitted_id }}</strong> — scroll to the highlighted row below.
+    </p>
+  {% endif %}
+
   <section class="mb-8 rounded-lg border border-slate-800 bg-slate-900/50 p-4">
     <form id="simulate-form" method="post" action="/demo/simulate" class="space-y-3">
       <label class="block text-sm font-medium text-slate-300">Message body</label>
-      <textarea name="sms_body" rows="5" class="w-full rounded-md border border-slate-700 bg-slate-950 px-3 py-2 text-sm text-slate-100 focus:border-sky-500 focus:outline-none focus:ring-1 focus:ring-sky-500" placeholder="Paste SMS in any language…">{{ prefill }}</textarea>
+      <textarea name="sms_body" rows="5" class="w-full rounded-md border border-slate-700 bg-slate-950 px-3 py-2 text-sm text-slate-100 focus:border-sky-500 focus:outline-none focus:ring-1 focus:ring-sky-500" placeholder="Paste referral SMS…">{{ prefill }}</textarea>
       <div id="submit-progress" class="hidden space-y-2">
         <p class="text-sm text-sky-300">Submitting — page will refresh when intake is queued…</p>
         <div class="h-2 w-full overflow-hidden rounded-full bg-slate-800">
@@ -63,7 +79,7 @@
         <a href="/demo/console?sample=messy" class="rounded-md border border-slate-600 px-3 py-2 text-sm text-slate-200 hover:bg-slate-800">Try messy</a>
         <a href="/demo/console?sample=ambiguous" class="rounded-md border border-slate-600 px-3 py-2 text-sm text-slate-200 hover:bg-slate-800">Try ambiguous</a>
         <a href="/demo/console?sample=spanish" class="rounded-md border border-slate-600 px-3 py-2 text-sm text-slate-200 hover:bg-slate-800">Try Spanish</a>
-        <a href="/demo/console?sample=international" class="rounded-md border border-slate-600 px-3 py-2 text-sm text-slate-200 hover:bg-slate-800">Try intl (+91)</a>
+        <a href="/demo/console?sample=international" class="rounded-md border border-slate-600 px-3 py-2 text-sm text-slate-200 hover:bg-slate-800">Try intl</a>
       </div>
     </form>
   </section>
@@ -74,7 +90,9 @@
       <p class="text-sm text-slate-500">No rows yet. Submit a message above.</p>
     {% else %}
       {% for intake in intakes %}
-        {% include "_intake_row.html" %}
+        {% with highlight_intake_id=submitted_id %}
+          {% include "_intake_row.html" %}
+        {% endwith %}
       {% endfor %}
     {% endif %}
   </section>
@@ -105,6 +123,11 @@
         if (bar) bar.classList.remove("hidden");
         if (btn) btn.disabled = true;
       });
+
+      {% if submitted_id %}
+      var row = document.getElementById("intake-{{ submitted_id }}");
+      if (row) row.scrollIntoView({ behavior: "smooth", block: "center" });
+      {% endif %}
     })();
   </script>
 {% endblock %}

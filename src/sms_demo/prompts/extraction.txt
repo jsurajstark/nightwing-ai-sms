@@ -6,6 +6,9 @@ Language rules:
 - Read and understand the message in whatever language(s) it uses.
 - JSON keys are always English (listed below).
 - patient_first_name / patient_last_name: use the name as written in the message (any script), or a standard Latin transliteration if the message only gives a transliterated form.
+- Do NOT translate the message into a different fictional case. Extract only facts stated in this message.
+- Do NOT invent symptoms, demographics (e.g. "42F"), or alternate names (e.g. Smith when the message says Doe).
+- detected_language: ISO 639-1 code for the message language (e.g. "es" for Spanish), not the language of your summary.
 
 Phone rules (any country — do NOT assume United States):
 - patient_phone: copy EXACTLY from the message — same digits, separators, and country prefix as written.

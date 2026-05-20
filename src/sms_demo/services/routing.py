@@ -3,6 +3,8 @@ from __future__ import annotations
 import json
 from dataclasses import dataclass
 
+from sms_demo.services.name_extract import extracted_names_match_raw
+
 
 @dataclass(frozen=True)
 class RoutingOutcome:
@@ -35,6 +37,13 @@ def decide(parsed: dict | None, *, raw_body: str) -> RoutingOutcome:
         return RoutingOutcome(
             "review",
             f"missing_fields:{','.join(missing)}",
+            _float(parsed.get("confidence")),
+        )
+
+    if not extracted_names_match_raw(text, parsed):
+        return RoutingOutcome(
+            "review",
+            "extraction_names_not_in_message",
             _float(parsed.get("confidence")),
         )
 

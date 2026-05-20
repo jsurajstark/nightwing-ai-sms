@@ -16,7 +16,11 @@ class InlineExtractionQueue(ExtractionQueueBackend):
     """
 
     def enqueue_extraction(self, intake_id: int) -> None:
-        from sms_demo.services.pipeline import complete_intake
+        from sms_demo.services.pipeline import complete_intake, intake_is_finished
+
+        if intake_is_finished(intake_id):
+            logger.info("Inline skip enqueue intake_id=%s — already extracted", intake_id)
+            return
 
         logger.info("Inline thread enqueue intake_id=%s", intake_id)
         threading.Thread(target=complete_intake, args=(intake_id,), daemon=True).start()
