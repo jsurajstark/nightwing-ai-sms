@@ -13,7 +13,7 @@ class Settings(BaseSettings):
 
     llm_provider: str = "ollama"
     ollama_host: str = "http://127.0.0.1:11434"
-    ollama_model: str = "llama3.1:8b-instruct-q4_K_M"
+    ollama_model: str = "qwen2.5:7b"
 
     google_api_key: str | None = None
     gemini_model: str = "gemini-2.0-flash"

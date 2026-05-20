@@ -23,7 +23,7 @@ worker:
 	$(CELERY)
 
 ollama-pull:
-	ollama pull llama3.1:8b-instruct-q4_K_M
+	ollama pull qwen2.5:7b
 
 seed:
 	python scripts/seed_samples.py
