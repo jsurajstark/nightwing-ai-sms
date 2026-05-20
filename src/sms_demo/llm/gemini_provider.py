@@ -1,4 +1,3 @@
-import json
 import logging
 import time
 
@@ -7,6 +6,7 @@ from google.genai import types
 
 from sms_demo.llm.base import LLMError, LLMProvider
 from sms_demo.llm.error_format import llm_error_from_exception, log_llm_api_failure
+from sms_demo.llm.json_parse import parse_llm_json
 
 logger = logging.getLogger(__name__)
 
@@ -82,16 +82,10 @@ class GeminiProvider(LLMProvider):
 
         logger.debug("Gemini raw content: %s", content[:2000])
 
-        try:
-            parsed = json.loads(content)
-            logger.info(
-                "Gemini JSON parsed keys=%s mobile=%r",
-                list(parsed.keys()) if isinstance(parsed, dict) else type(parsed).__name__,
-                parsed.get("mobile") if isinstance(parsed, dict) else None,
-            )
-            if not isinstance(parsed, dict):
-                raise LLMError(f"Expected JSON object, got {type(parsed).__name__}")
-            return parsed
-        except json.JSONDecodeError as e:
-            logger.error("Gemini invalid JSON (first 500 chars): %s", content[:500])
-            raise LLMError(f"Model did not return valid JSON: {content[:500]}") from e
+        parsed = parse_llm_json(content)
+        logger.info(
+            "Gemini JSON parsed keys=%s mobile=%r",
+            list(parsed.keys()),
+            parsed.get("mobile"),
+        )
+        return parsed

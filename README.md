@@ -58,11 +58,13 @@ LLM_PROVIDER=ollama   # local Ollama
 # LLM_PROVIDER=github  # GitHub Models (GITHUB_MODELS_TOKEN)
 ```
 
-**GitHub Models (default: Phi-4 mini instruct):** Phi-3 models are no longer in the [catalog](https://models.github.ai/catalog/models). Create a [GitHub PAT](https://github.com/settings/tokens) with **`models`** scope (fine-grained: **Models → Read**), then:
+**GitHub Models:** Create a [GitHub PAT](https://github.com/settings/tokens) with **`models`** scope (fine-grained: **Models → Read**). Pick a model id from the [catalog](https://models.github.ai/catalog/models) (Phi-3* models are retired).
 
 ```env
 LLM_PROVIDER=github
-GITHUB_MODELS_TOKEN=ghp_...
+GITHUB_MODELS_API_KEY=ghp_...
+GITHUB_MODELS_BASE_URL=https://models.github.ai
+GITHUB_MODELS_API_VERSION=2026-03-10
 GITHUB_MODELS_MODEL=microsoft/phi-4-mini-instruct
 ```
 

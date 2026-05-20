@@ -1,10 +1,10 @@
-import json
 import logging
 import time
 
 import httpx
 
 from sms_demo.llm.base import LLMError, LLMProvider
+from sms_demo.llm.json_parse import parse_llm_json
 
 logger = logging.getLogger(__name__)
 
@@ -71,14 +71,10 @@ class OllamaProvider(LLMProvider):
 
         logger.debug("Ollama raw content: %s", content[:2000])
 
-        try:
-            parsed = json.loads(content)
-            logger.info(
-                "Ollama JSON parsed keys=%s patient_phone=%r",
-                list(parsed.keys()) if isinstance(parsed, dict) else type(parsed).__name__,
-                parsed.get("patient_phone") if isinstance(parsed, dict) else None,
-            )
-            return parsed
-        except json.JSONDecodeError as e:
-            logger.error("Ollama invalid JSON (first 500 chars): %s", content[:500])
-            raise LLMError(f"Model did not return valid JSON: {content[:500]}") from e
+        parsed = parse_llm_json(content)
+        logger.info(
+            "Ollama JSON parsed keys=%s patient_phone=%r",
+            list(parsed.keys()),
+            parsed.get("patient_phone"),
+        )
+        return parsed

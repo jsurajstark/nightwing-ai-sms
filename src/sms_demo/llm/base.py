@@ -11,11 +11,13 @@ class LLMError(Exception):
         http_code: int | None = None,
         status: str | None = None,
         retry_after_s: float | None = None,
+        retryable: bool = False,
     ) -> None:
         super().__init__(message)
         self.http_code = http_code
         self.status = status
         self.retry_after_s = retry_after_s
+        self.retryable = retryable
 
     @property
     def routing_reason(self) -> str:

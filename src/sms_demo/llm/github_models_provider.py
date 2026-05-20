@@ -1,4 +1,3 @@
-import json
 import logging
 import time
 
@@ -6,11 +5,12 @@ import httpx
 
 from sms_demo.llm.base import LLMError, LLMProvider
 from sms_demo.llm.error_format import log_llm_api_failure
+from sms_demo.llm.json_parse import parse_llm_json
 
 logger = logging.getLogger(__name__)
 
-GITHUB_MODELS_CHAT_URL = "https://models.github.ai/inference/chat/completions"
-GITHUB_API_VERSION = "2022-11-28"
+DEFAULT_CHAT_URL = "https://models.github.ai/inference/chat/completions"
+DEFAULT_API_VERSION = "2026-03-10"
 
 
 class GitHubModelsProvider(LLMProvider):
@@ -18,16 +18,20 @@ class GitHubModelsProvider(LLMProvider):
 
     def __init__(
         self,
-        token: str,
+        api_key: str,
         model: str,
         *,
         timeout_s: float = 180.0,
-        base_url: str = GITHUB_MODELS_CHAT_URL,
+        max_tokens: int = 1024,
+        chat_url: str = DEFAULT_CHAT_URL,
+        api_version: str = DEFAULT_API_VERSION,
     ) -> None:
-        self._token = token
+        self._api_key = api_key
         self._model = model
         self._timeout = timeout_s
-        self._url = base_url.rstrip("/")
+        self._max_tokens = max_tokens
+        self._url = chat_url.rstrip("/")
+        self._api_version = api_version
 
     def extract_referral(
         self,
@@ -50,11 +54,12 @@ class GitHubModelsProvider(LLMProvider):
             ],
             "response_format": {"type": "json_object"},
             "temperature": 0,
+            "max_tokens": self._max_tokens,
         }
         headers = {
             "Accept": "application/vnd.github+json",
-            "Authorization": f"Bearer {self._token}",
-            "X-GitHub-Api-Version": GITHUB_API_VERSION,
+            "Authorization": f"Bearer {self._api_key}",
+            "X-GitHub-Api-Version": self._api_version,
             "Content-Type": "application/json",
         }
 
@@ -109,10 +114,18 @@ class GitHubModelsProvider(LLMProvider):
 
         try:
             choices = data["choices"]
-            content = choices[0]["message"]["content"]
+            choice = choices[0]
+            content = choice["message"]["content"]
+            finish_reason = choice.get("finish_reason")
         except (KeyError, IndexError, TypeError) as e:
             logger.error("GitHub Models unexpected response shape: %r", data)
             raise LLMError(f"Unexpected GitHub Models response shape: {data!r}") from e
+
+        if finish_reason == "length":
+            logger.warning(
+                "GitHub Models response truncated (finish_reason=length, max_tokens=%d)",
+                self._max_tokens,
+            )
 
         content = (content or "").strip()
         if not content:
@@ -122,15 +135,13 @@ class GitHubModelsProvider(LLMProvider):
         logger.debug("GitHub Models raw content: %s", content[:2000])
 
         try:
-            parsed = json.loads(content)
+            parsed = parse_llm_json(content)
             logger.info(
                 "GitHub Models JSON parsed keys=%s mobile=%r",
-                list(parsed.keys()) if isinstance(parsed, dict) else type(parsed).__name__,
-                parsed.get("mobile") if isinstance(parsed, dict) else None,
+                list(parsed.keys()),
+                parsed.get("mobile"),
             )
-            if not isinstance(parsed, dict):
-                raise LLMError(f"Expected JSON object, got {type(parsed).__name__}")
             return parsed
-        except json.JSONDecodeError as e:
+        except LLMError:
             logger.error("GitHub Models invalid JSON (first 500 chars): %s", content[:500])
-            raise LLMError(f"Model did not return valid JSON: {content[:500]}") from e
+            raise

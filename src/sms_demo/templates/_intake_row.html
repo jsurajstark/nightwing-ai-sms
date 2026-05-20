@@ -31,52 +31,43 @@
     </div>
     <div>
       <h3 class="mb-1 text-xs font-semibold uppercase tracking-wide text-slate-500">Extraction</h3>
-      {% if intake_is_processing(intake) %}
-        <p class="text-xs text-slate-500">Waiting for model…</p>
+      {% if not intake_is_complete(intake) %}
+        <p class="text-xs text-slate-500">{% if intake_is_processing(intake) %}Waiting for model…{% elif intake_is_queued(intake) %}Queued for extraction…{% else %}Pending extraction{% endif %}</p>
+      {% elif intake_latest_extraction(intake) and intake_latest_extraction(intake).error %}
+        <pre class="max-h-48 overflow-auto rounded bg-rose-950/40 p-2 text-xs text-rose-200">{{ intake_latest_extraction(intake).error }}</pre>
+      {% elif intake_latest_extraction(intake) and intake_latest_extraction(intake).parsed_json %}
+        <pre class="max-h-48 overflow-auto rounded bg-slate-950 p-2 text-xs text-emerald-100">{{ intake_latest_extraction(intake).parsed_json }}</pre>
       {% else %}
-        {% set ext = intake.extractions[0] if intake.extractions else None %}
-        {% if ext and ext.error %}
-          <pre class="max-h-48 overflow-auto rounded bg-rose-950/40 p-2 text-xs text-rose-200">{{ ext.error }}</pre>
-        {% elif ext and ext.parsed_json %}
-          <pre class="max-h-48 overflow-auto rounded bg-slate-950 p-2 text-xs text-emerald-100">{{ ext.parsed_json }}</pre>
-        {% else %}
-          <p class="text-xs text-slate-500">—</p>
-        {% endif %}
+        <p class="text-xs text-slate-500">—</p>
       {% endif %}
     </div>
   </div>
   <div class="mt-4 flex flex-wrap items-start gap-4">
     <div>
       <h3 class="mb-1 text-xs font-semibold uppercase tracking-wide text-slate-500">Routing</h3>
-      {% if intake_is_processing(intake) %}
+      {% if not intake_is_complete(intake) %}
         <p class="text-xs text-slate-500">Pending extraction</p>
-      {% else %}
-        {% set rd = intake.routing_decisions[0] if intake.routing_decisions else None %}
-        {% if rd %}
-          {% if rd.decision == "auto" %}
-            <span class="inline-flex rounded-full bg-emerald-900/60 px-2 py-1 text-xs font-medium text-emerald-200">auto</span>
-          {% elif rd.decision == "review" %}
-            <span class="inline-flex rounded-full bg-amber-900/60 px-2 py-1 text-xs font-medium text-amber-200">review</span>
-          {% else %}
-            <span class="inline-flex rounded-full bg-rose-900/60 px-2 py-1 text-xs font-medium text-rose-200">spam</span>
-          {% endif %}
-          <p class="mt-1 text-xs text-slate-400">{{ rd.reason }}</p>
+      {% elif intake_latest_routing(intake) %}
+        {% if intake_latest_routing(intake).decision == "auto" %}
+          <span class="inline-flex rounded-full bg-emerald-900/60 px-2 py-1 text-xs font-medium text-emerald-200">auto</span>
+        {% elif intake_latest_routing(intake).decision == "review" %}
+          <span class="inline-flex rounded-full bg-amber-900/60 px-2 py-1 text-xs font-medium text-amber-200">review</span>
         {% else %}
-          <p class="text-xs text-slate-500">—</p>
+          <span class="inline-flex rounded-full bg-rose-900/60 px-2 py-1 text-xs font-medium text-rose-200">spam</span>
         {% endif %}
+        <p class="mt-1 text-xs text-slate-400">{{ intake_latest_routing(intake).reason }}</p>
+      {% else %}
+        <p class="text-xs text-slate-500">—</p>
       {% endif %}
     </div>
     <div class="min-w-0 flex-1">
       <h3 class="mb-1 text-xs font-semibold uppercase tracking-wide text-slate-500">Core partial referral</h3>
-      {% if intake_is_processing(intake) %}
+      {% if not intake_is_complete(intake) %}
         <p class="text-xs text-slate-500">Pending routing</p>
+      {% elif intake_latest_partial(intake) %}
+        <pre class="max-h-48 overflow-auto rounded bg-slate-950 p-2 text-xs text-sky-100">{{ intake_latest_partial(intake).stub_response_json }}</pre>
       {% else %}
-        {% set pr = intake.partial_referrals[0] if intake.partial_referrals else None %}
-        {% if pr %}
-          <pre class="max-h-48 overflow-auto rounded bg-slate-950 p-2 text-xs text-sky-100">{{ pr.stub_response_json }}</pre>
-        {% else %}
-          <p class="text-xs text-slate-500">No partial referral (non-auto route or error).</p>
-        {% endif %}
+        <p class="text-xs text-slate-500">No partial referral (non-auto route or error).</p>
       {% endif %}
     </div>
   </div>

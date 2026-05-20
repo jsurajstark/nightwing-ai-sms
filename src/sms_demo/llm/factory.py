@@ -24,17 +24,20 @@ def get_provider(settings: Settings) -> LLMProvider:
             timeout_s=settings.llm_timeout_s,
         )
     if p in ("github", "github_models"):
-        token = settings.github_models_token
-        if not token:
+        api_key = settings.resolved_github_models_api_key
+        if not api_key:
             raise ValueError(
-                "GITHUB_MODELS_TOKEN is required when LLM_PROVIDER=github "
-                "(create a PAT with the `models` scope at https://github.com/settings/tokens)"
+                "GITHUB_MODELS_API_KEY (or GITHUB_MODELS_TOKEN) is required when "
+                "LLM_PROVIDER=github — create a PAT with the `models` scope (fine-grained: "
+                "Models → Read) at https://github.com/settings/tokens"
             )
         return GitHubModelsProvider(
-            token,
+            api_key,
             settings.github_models_model,
             timeout_s=settings.llm_timeout_s,
-            base_url=settings.github_models_base_url,
+            max_tokens=settings.llm_max_tokens,
+            chat_url=settings.resolved_github_models_chat_url,
+            api_version=settings.github_models_api_version,
         )
     if p == "anthropic":
         return AnthropicProvider()

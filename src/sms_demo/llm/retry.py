@@ -20,6 +20,12 @@ def is_llm_timeout(exc: BaseException) -> bool:
     return "timeout" in msg or "timed out" in msg
 
 
+def is_retryable_llm_error(exc: LLMError) -> bool:
+    if is_llm_timeout(exc):
+        return True
+    return bool(getattr(exc, "retryable", False))
+
+
 def extract_with_retries(
     provider: LLMProvider,
     sms_body: str,
@@ -27,7 +33,9 @@ def extract_with_retries(
     settings: Settings,
 ) -> dict:
     """
-    Call the LLM with escalating timeouts on timeout-only failures.
+    Call the LLM with escalating timeouts on retryable failures.
+
+    Retries on timeouts and invalid/truncated JSON (transient model output).
 
     Attempt 1: llm_timeout_s (default 180s)
     Retry 1:   + llm_timeout_increment_s (210s)
@@ -41,7 +49,7 @@ def extract_with_retries(
         try:
             if attempt > 0:
                 logger.warning(
-                    "LLM timeout retry attempt %s/%s timeout_s=%.0f",
+                    "LLM retry attempt %s/%s timeout_s=%.0f",
                     attempt + 1,
                     max_attempts,
                     timeout_s,
@@ -51,10 +59,10 @@ def extract_with_retries(
             )
         except LLMError as e:
             last_error = e
-            if not is_llm_timeout(e) or attempt >= settings.llm_max_retries:
+            if not is_retryable_llm_error(e) or attempt >= settings.llm_max_retries:
                 raise
             logger.warning(
-                "LLM timed out on attempt %s/%s (timeout_s=%.0f): %s",
+                "LLM retryable failure on attempt %s/%s (timeout_s=%.0f): %s",
                 attempt + 1,
                 max_attempts,
                 timeout_s,

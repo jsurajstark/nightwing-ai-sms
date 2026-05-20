@@ -126,11 +126,16 @@ PIPELINE_PROCESSING = "processing"
 PIPELINE_COMPLETE = "complete"
 
 
+def intake_is_complete(intake: Intake) -> bool:
+    """True when extraction + routing have finished for this intake."""
+    return intake.pipeline_status == PIPELINE_COMPLETE
+
+
 def intake_is_pending(intake: Intake) -> bool:
-    """True while extraction has not finished (saved intake, no routing yet)."""
+    """True while the pipeline has not reached ``complete`` (queue, LLM, or routing)."""
     if not (intake.raw_body or "").strip():
         return False
-    return len(intake.routing_decisions) == 0
+    return not intake_is_complete(intake)
 
 
 def intake_is_queued(intake: Intake) -> bool:
@@ -146,6 +151,19 @@ def intake_is_processing(intake: Intake) -> bool:
     if not intake_is_pending(intake):
         return False
     return intake.pipeline_status == PIPELINE_PROCESSING
+
+
+def intake_latest_extraction(intake: Intake) -> Extraction | None:
+    """Most recent extraction row for console display."""
+    return intake.extractions[-1] if intake.extractions else None
+
+
+def intake_latest_routing(intake: Intake) -> RoutingDecision | None:
+    return intake.routing_decisions[-1] if intake.routing_decisions else None
+
+
+def intake_latest_partial(intake: Intake) -> PartialReferral | None:
+    return intake.partial_referrals[-1] if intake.partial_referrals else None
 
 
 def intake_timing_summary(intake: Intake) -> str:

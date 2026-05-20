@@ -1,7 +1,6 @@
 {% extends "base.html" %}
 {% block title %}Console · Nightwing SMS Demo{% endblock %}
 {% block head %}
-  <meta http-equiv="refresh" content="{{ refresh_secs }}" />
   <style>
     @keyframes demo-progress-slide {
       0% { transform: translateX(-100%); }
@@ -37,7 +36,7 @@
     </div>
   </header>
 
-  {% if has_processing or has_queued %}
+  {% if has_incomplete %}
     <p class="mb-4 rounded-md border border-sky-800 bg-sky-950/40 px-3 py-2 text-sm text-sky-200">
       {% if has_processing %}Extraction in progress{% else %}Waiting in Celery queue{% endif %} — page reloads every <strong>{{ refresh_secs }}s</strong> until complete. Ensure <code class="text-xs">make worker</code> is running.
     </p>
@@ -81,6 +80,17 @@
 
   <script>
     (function () {
+      var refreshSecs = {{ refresh_secs }};
+      var hasIncomplete = {{ has_incomplete|tojson }};
+
+      if (hasIncomplete) {
+        window.setTimeout(function () {
+          var url = new URL(window.location.href);
+          url.searchParams.set("_", String(Date.now()));
+          window.location.replace(url.toString());
+        }, refreshSecs * 1000);
+      }
+
       var timer = document.getElementById("refresh-timer");
       var countdownEl = document.getElementById("refresh-countdown");
       if (timer && countdownEl) {

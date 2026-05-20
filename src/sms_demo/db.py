@@ -87,6 +87,17 @@ def _migrate_sqlite(conn) -> None:
             """
         )
     )
+    # Backfill: rows with routing but stale status (legacy bug / partial writes)
+    conn.execute(
+        text(
+            """
+            UPDATE intakes
+            SET pipeline_status = 'complete'
+            WHERE pipeline_status IN ('queued', 'processing')
+              AND id IN (SELECT intake_id FROM routing_decisions)
+            """
+        )
+    )
 
 
 def init_database() -> None:

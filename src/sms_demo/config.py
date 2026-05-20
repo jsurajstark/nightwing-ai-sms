@@ -19,14 +19,16 @@ class Settings(BaseSettings):
     gemini_model: str = "gemini-2.0-flash"
 
     # GitHub Models (PAT with `models` scope — https://github.com/settings/tokens)
-    github_models_token: str | None = None
-    # Phi-3* models removed from catalog; use phi-4-mini-instruct (see GET models.github.ai/catalog/models)
+    github_models_api_key: str | None = None
+    github_models_token: str | None = None  # alias for github_models_api_key
     github_models_model: str = "microsoft/phi-4-mini-instruct"
-    github_models_base_url: str = "https://models.github.ai/inference/chat/completions"
+    github_models_base_url: str = "https://models.github.ai"
+    github_models_api_version: str = "2026-03-10"
 
     llm_timeout_s: float = 180.0
     llm_max_retries: int = 2
     llm_timeout_increment_s: float = 30.0
+    llm_max_tokens: int = 1024
 
     database_url: str = "sqlite:///./data/demo.db"
 
@@ -60,6 +62,7 @@ class Settings(BaseSettings):
         "celery_result_backend",
         "sqs_queue_url",
         "core_api_access_token",
+        "github_models_api_key",
         "github_models_token",
         mode="before",
     )
@@ -83,6 +86,17 @@ class Settings(BaseSettings):
                 return None
             return int(s) if s.isdigit() else v
         return v
+
+    @property
+    def resolved_github_models_api_key(self) -> str | None:
+        return self.github_models_api_key or self.github_models_token
+
+    @property
+    def resolved_github_models_chat_url(self) -> str:
+        base = self.github_models_base_url.rstrip("/")
+        if base.endswith("/inference/chat/completions"):
+            return base
+        return f"{base}/inference/chat/completions"
 
     @property
     def resolved_celery_broker_url(self) -> str:

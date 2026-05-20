@@ -18,6 +18,11 @@ from sms_demo.services.pipeline import (
     llm_extraction_label,
     schedule_intake_extraction,
 )
+
+_CONSOLE_CACHE_HEADERS = {
+    "Cache-Control": "no-store, no-cache, must-revalidate",
+    "Pragma": "no-cache",
+}
 from sms_demo.templating import templates
 
 router = APIRouter(prefix="/demo", tags=["demo"])
@@ -53,8 +58,9 @@ def console(
     intakes = list_intakes_for_console(db)
     has_processing = any(intake_is_processing(i) for i in intakes)
     has_queued = any(intake_is_queued(i) for i in intakes)
+    has_incomplete = has_processing or has_queued
     active_intake_id = next((i.id for i in intakes if intake_is_processing(i)), None)
-    refresh_secs = 10 if (has_processing or has_queued) else 30
+    refresh_secs = 10 if has_incomplete else 30
     return templates.TemplateResponse(
         request,
         "console.html",
@@ -65,11 +71,13 @@ def console(
             "twilio_enabled": settings.enable_twilio_webhook,
             "has_processing": has_processing,
             "has_queued": has_queued,
+            "has_incomplete": has_incomplete,
             "active_intake_id": active_intake_id,
             "queue_backend": settings.queue_backend,
             "refresh_secs": refresh_secs,
             "llm_extraction_label": llm_extraction_label(settings),
         },
+        headers=_CONSOLE_CACHE_HEADERS,
     )
 
 
