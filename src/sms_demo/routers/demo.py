@@ -37,6 +37,7 @@ def _read_sample(name: str) -> str | None:
 def console(
     request: Request,
     sample: str | None = None,
+    submitted: int | None = None,
     db: Session = Depends(get_db),
     settings: Settings = Depends(get_settings),
 ):
@@ -54,12 +55,13 @@ def console(
     has_processing = any(intake_is_processing(i) for i in intakes)
     has_queued = any(intake_is_queued(i) for i in intakes)
     active_intake_id = next((i.id for i in intakes if intake_is_processing(i)), None)
-    refresh_secs = 10 if (has_processing or has_queued) else 30
+    refresh_secs = 3 if submitted is not None else (10 if (has_processing or has_queued) else 30)
     return templates.TemplateResponse(
         request,
         "console.html",
         {
             "intakes": intakes,
+            "submitted_intake_id": submitted,
             "prefill": prefill,
             "hint": hint,
             "twilio_enabled": settings.enable_twilio_webhook,

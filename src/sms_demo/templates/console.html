@@ -74,7 +74,9 @@
       <p class="text-sm text-slate-500">No rows yet. Submit a message above.</p>
     {% else %}
       {% for intake in intakes %}
-        {% include "_intake_row.html" %}
+        {% with highlight=(submitted_intake_id is not none and intake.id == submitted_intake_id) %}
+          {% include "_intake_row.html" %}
+        {% endwith %}
       {% endfor %}
     {% endif %}
   </section>
@@ -105,6 +107,14 @@
         if (bar) bar.classList.remove("hidden");
         if (btn) btn.disabled = true;
       });
+
+      var submitted = {{ submitted_intake_id if submitted_intake_id is not none else "null" }};
+      if (submitted) {
+        var row = document.getElementById("intake-" + submitted);
+        if (row) {
+          row.scrollIntoView({ behavior: "smooth", block: "nearest" });
+        }
+      }
     })();
   </script>
 {% endblock %}

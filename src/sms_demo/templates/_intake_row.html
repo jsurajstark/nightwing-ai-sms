@@ -1,4 +1,4 @@
-<article class="rounded-lg border border-slate-800 bg-slate-900/40 p-4 shadow-sm{% if intake_is_processing(intake) %} border-sky-800/80{% elif intake_is_queued(intake) %} border-amber-800/60{% endif %}">
+<article id="intake-{{ intake.id }}" class="rounded-lg border border-slate-800 bg-slate-900/40 p-4 shadow-sm{% if highlight %} border-sky-500 ring-1 ring-sky-500/40{% elif intake_is_processing(intake) %} border-sky-800/80{% elif intake_is_queued(intake) %} border-amber-800/60{% endif %}">
   <div class="mb-3 flex flex-wrap items-center justify-between gap-2 text-xs text-slate-400">
     <span>#{{ intake.id }} · {{ intake.source }}{% if intake.external_id %} · {{ intake.external_id }}{% endif %}</span>
     <div class="flex items-center gap-3">
@@ -35,6 +35,9 @@
         <p class="text-xs text-slate-500">Waiting for model…</p>
       {% else %}
         {% set ext = intake.extractions[0] if intake.extractions else None %}
+        {% if ext %}
+          <p class="mb-1 text-[10px] uppercase tracking-wide text-slate-500">{{ ext.model_provider }} · {{ ext.model_name }}</p>
+        {% endif %}
         {% if ext and ext.error %}
           <pre class="max-h-48 overflow-auto rounded bg-rose-950/40 p-2 text-xs text-rose-200">{{ ext.error }}</pre>
         {% elif ext and ext.parsed_json %}

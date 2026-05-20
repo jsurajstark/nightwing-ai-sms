@@ -98,12 +98,17 @@ def _persist_partial_referral(
     )
 
 
-def _model_name(settings: Settings) -> str:
-    provider = (settings.llm_provider or "").lower()
-    if provider == "ollama":
+def _model_name(settings: Settings, provider: object | None = None) -> str:
+    used = getattr(provider, "last_model_used", None)
+    if used:
+        return str(used)
+    provider_key = (settings.llm_provider or "").lower()
+    if provider_key == "ollama":
         return settings.ollama_model
-    if provider == "gemini":
+    if provider_key == "gemini":
         return settings.gemini_model
+    if provider_key == "github":
+        return settings.github_models_model or "unknown"
     return settings.llm_provider or "unknown"
 
 
@@ -112,6 +117,12 @@ def llm_extraction_label(settings: Settings) -> str:
     provider = (settings.llm_provider or "ollama").lower()
     if provider == "gemini":
         return f"Gemini ({settings.gemini_model})"
+    if provider == "github":
+        chain = settings.github_models_model_chain
+        label = chain[0] if chain else (settings.github_models_model or "unset")
+        if len(chain) > 1:
+            return f"GitHub Models ({label} + {len(chain) - 1} fallback(s))"
+        return f"GitHub Models ({label})"
     if provider == "ollama":
         return f"Ollama ({settings.ollama_model})"
     return _model_name(settings)
@@ -256,7 +267,7 @@ def _run_llm_phase(db: Session, settings: Settings, intake: Intake, raw: str) ->
         Extraction(
             intake_id=intake.id,
             model_provider=settings.llm_provider,
-            model_name=_model_name(settings),
+            model_name=_model_name(settings, provider),
             raw_json=raw_model_json,
             parsed_json=raw_model_json,
             error=extraction_error,
@@ -358,6 +369,7 @@ def complete_intake(intake_id: int) -> None:
                 if intake is None or not intake_is_pending(intake):
                     return
                 _run_llm_phase(db, settings, intake, intake.raw_body)
+                db.flush()
                 db.commit()
         except Exception as exc:
             logger.exception("Background extraction failed intake_id=%s", intake_id)
@@ -391,11 +403,18 @@ def complete_intake(intake_id: int) -> None:
 
 
 def recover_queued_intakes() -> None:
-    """Re-enqueue intakes left queued after API or broker restart."""
+    """Re-enqueue intakes still waiting for extraction (no routing decision yet)."""
     Session = sessionmaker(bind=get_engine())
     with Session() as db:
-        stmt = select(Intake.id).where(Intake.pipeline_status == PIPELINE_QUEUED)
-        intake_ids = list(db.scalars(stmt).all())
+        stmt = (
+            select(Intake)
+            .options(
+                selectinload(Intake.routing_decisions),
+            )
+            .where(Intake.pipeline_status.in_((None, PIPELINE_QUEUED, PIPELINE_PROCESSING)))
+        )
+        intakes = list(db.scalars(stmt).all())
+        intake_ids = [i.id for i in intakes if intake_is_pending(i)]
     for intake_id in intake_ids:
         logger.info("Recovering queued intake_id=%s", intake_id)
         schedule_intake_extraction(intake_id)

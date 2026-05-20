@@ -18,6 +18,16 @@ class Settings(BaseSettings):
     google_api_key: str | None = None
     gemini_model: str = "gemini-2.0-flash"
 
+    # GitHub Models (LLM_PROVIDER=github)
+    github_models_api_key: str | None = None
+    github_models_base_url: str = "https://models.github.ai"
+    github_models_model: str = "meta/meta-llama-3.1-8b-instruct"
+    github_models_api_version: str = "2026-03-10"
+    github_models_org: str | None = None
+    github_models_fallback_models: str | None = None
+    github_models_max_retries: int = 2
+    github_models_retry_base_s: float = 5.0
+
     llm_timeout_s: float = 180.0
     llm_max_retries: int = 2
     llm_timeout_increment_s: float = 30.0
@@ -54,6 +64,8 @@ class Settings(BaseSettings):
         "celery_result_backend",
         "sqs_queue_url",
         "core_api_access_token",
+        "github_models_org",
+        "github_models_fallback_models",
         mode="before",
     )
     @classmethod
@@ -76,6 +88,25 @@ class Settings(BaseSettings):
                 return None
             return int(s) if s.isdigit() else v
         return v
+
+    @property
+    def github_models_model_chain(self) -> list[str]:
+        fallbacks: list[str] = []
+        if self.github_models_fallback_models:
+            fallbacks = [
+                m.strip()
+                for m in self.github_models_fallback_models.split(",")
+                if m.strip()
+            ]
+        seen: set[str] = set()
+        out: list[str] = []
+        for raw in [self.github_models_model, *fallbacks]:
+            m = (raw or "").strip()
+            if not m or m in seen:
+                continue
+            seen.add(m)
+            out.append(m)
+        return out
 
     @property
     def resolved_celery_broker_url(self) -> str:

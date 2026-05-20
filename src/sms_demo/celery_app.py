@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from celery import Celery
+from celery.signals import worker_process_init
 
 from sms_demo.config import get_settings
 
@@ -14,6 +15,16 @@ celery_app = Celery(
     backend=settings.resolved_celery_result_backend,
     include=["sms_demo.tasks.extraction"],
 )
+
+@worker_process_init.connect
+def _reset_worker_db_connections(**kwargs: object) -> None:
+    """SQLite connections must not be shared across Celery fork pool workers."""
+    from sms_demo.config import get_settings
+    from sms_demo.db import dispose_engine
+
+    dispose_engine()
+    get_settings.cache_clear()
+
 
 celery_app.conf.update(
     task_serializer="json",

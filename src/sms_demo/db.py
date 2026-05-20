@@ -17,6 +17,15 @@ def _set_sqlite_pragma(dbapi_connection, connection_record) -> None:
     cursor.close()
 
 
+def dispose_engine() -> None:
+    """Drop pooled connections (required after Celery worker fork with SQLite)."""
+    global _engine, _SessionLocal
+    if _engine is not None:
+        _engine.dispose()
+    _engine = None
+    _SessionLocal = None
+
+
 def get_engine():
     global _engine, _SessionLocal
     if _engine is None:
@@ -75,7 +84,17 @@ def _migrate_sqlite(conn) -> None:
     if "llm_duration_ms" not in extraction_cols:
         conn.execute(text("ALTER TABLE extractions ADD COLUMN llm_duration_ms FLOAT"))
 
-    # Backfill: pending intakes (no routing) → queued for worker recovery
+    # Backfill: finished intakes → complete; pending non-empty → queued
+    conn.execute(
+        text(
+            """
+            UPDATE intakes
+            SET pipeline_status = 'complete'
+            WHERE id IN (SELECT intake_id FROM routing_decisions)
+              AND coalesce(pipeline_status, 'queued') != 'complete'
+            """
+        )
+    )
     conn.execute(
         text(
             """
