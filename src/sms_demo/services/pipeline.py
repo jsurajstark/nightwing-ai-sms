@@ -20,7 +20,11 @@ from sms_demo.services.phone_extract import reconcile_extraction_phones
 from sms_demo.services.llm_queue import llm_extraction_lock
 from sms_demo.services.routing import RoutingOutcome, decide
 from sms_demo.services.timing import format_duration_ms, utc_now, wall_duration_ms
-from sms_demo.utility.core_client import CorePartialReferralError, create_partial_referral
+from sms_demo.utility.core_client import (
+    CoreAuthError,
+    CorePartialReferralError,
+    create_partial_referral,
+)
 from sms_demo.utility.core_partial import to_partial_referral_request
 from sms_demo.utility.stub_core import apply_partial_referral
 
@@ -68,10 +72,27 @@ def _persist_partial_referral(
                 intake_id,
                 core_row.get("id"),
             )
-        except CorePartialReferralError as e:
-            logger.exception(
-                "Core partial-referral failed intake_id=%s: %s",
+        except CoreAuthError as e:
+            logger.warning(
+                "Core partial-referral auth failed intake_id=%s http=%s: %s. "
+                "Refresh CORE_API_ACCESS_TOKEN in .env and restart the worker.",
                 intake_id,
+                e.status_code,
+                e,
+            )
+            status = "auth_error"
+            core_row = {
+                "error": "core_auth_expired",
+                "message": str(e),
+                "status_code": e.status_code,
+                "request": body,
+                "body": e.body,
+            }
+        except CorePartialReferralError as e:
+            logger.error(
+                "Core partial-referral failed intake_id=%s http=%s: %s",
+                intake_id,
+                e.status_code,
                 e,
             )
             status = "error"

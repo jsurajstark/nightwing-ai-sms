@@ -6,6 +6,18 @@ from typing import Any
 
 import httpx
 
+_AUTH_HTTP_STATUSES = frozenset({401, 403})
+_AUTH_MESSAGE_MARKERS = (
+    "logged out",
+    "log in again",
+    "login again",
+    "unauthorized",
+    "invalid token",
+    "access token",
+    "token expired",
+    "session expired",
+)
+
 
 class CorePartialReferralError(Exception):
     """Core API returned an error or unexpected response."""
@@ -14,6 +26,31 @@ class CorePartialReferralError(Exception):
         super().__init__(message)
         self.status_code = status_code
         self.body = body
+
+
+class CoreAuthError(CorePartialReferralError):
+    """Core rejected the request because the access token is missing, invalid, or expired."""
+
+
+def is_core_auth_failure(*, status_code: int | None, message: str | None) -> bool:
+    """True when Core indicates the x-access-token is no longer valid."""
+    if status_code in _AUTH_HTTP_STATUSES:
+        return True
+    if not message:
+        return False
+    lower = message.lower()
+    return any(marker in lower for marker in _AUTH_MESSAGE_MARKERS)
+
+
+def _raise_core_error(
+    message: str,
+    *,
+    status_code: int | None = None,
+    body: Any = None,
+) -> None:
+    if is_core_auth_failure(status_code=status_code, message=message):
+        raise CoreAuthError(message, status_code=status_code, body=body)
+    raise CorePartialReferralError(message, status_code=status_code, body=body)
 
 
 def create_partial_referral(
@@ -48,7 +85,7 @@ def create_partial_referral(
 
     if resp.status_code >= 400:
         msg = envelope.get("message") if isinstance(envelope, dict) else resp.text
-        raise CorePartialReferralError(
+        _raise_core_error(
             msg or f"HTTP {resp.status_code}",
             status_code=resp.status_code,
             body=envelope,
@@ -58,11 +95,8 @@ def create_partial_referral(
         raise CorePartialReferralError("Unexpected Core response shape", body=envelope)
 
     if not envelope.get("success"):
-        raise CorePartialReferralError(
-            envelope.get("message") or "Core partial-referral failed",
-            status_code=resp.status_code,
-            body=envelope,
-        )
+        msg = envelope.get("message") or "Core partial-referral failed"
+        _raise_core_error(msg, status_code=resp.status_code, body=envelope)
 
     data = envelope.get("data")
     if not isinstance(data, dict):
